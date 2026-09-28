@@ -1,0 +1,26 @@
+# --- bí mật / credentials (không bao giờ commit) ---
+scripts/app_settings.json
+scripts/login_sci99.py
+scripts/login_sci99_daily.py
+scripts/sci99_cookies.json
+scripts/echemi_cookies.json
+.env
+*.pem
+*-key.json
+service_account.json
+
+# --- browser profile + cache ---
+scripts/.echemi_profile/
+.echemi_profile/
+
+# --- Python cache ---
+__pycache__/
+*.py[cod]
+
+# --- log / runtime artifacts ---
+scripts/logs/
+logs/
+*.log
+
+# --- archive one-off (chứa creds + data scrape cũ) ---
+scripts/_archive/
