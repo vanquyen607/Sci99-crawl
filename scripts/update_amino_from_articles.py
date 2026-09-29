@@ -16,6 +16,16 @@ import newsheet_lib
 ARTICLES = [
     'https://www.sci99.com/info/3_1000008_45667839.html',  # 2026-09-28
     'https://www.sci99.com/info/3_1000008_45655299.html',  # 2026-09-24
+    'https://www.sci99.com/info/3_1000008_45644310.html',  # 2026-09-23
+    'https://www.sci99.com/info/3_1000008_45633354.html',  # 2026-09-22
+    'https://www.sci99.com/info/3_1000008_45622961.html',  # 2026-09-21
+    'https://www.sci99.com/info/3_1000008_45612795.html',  # 2026-09-20
+    'https://www.sci99.com/info/3_1000008_45600827.html',  # 2026-09-18
+    'https://www.sci99.com/info/3_1000008_45587919.html',  # 2026-09-17
+    'https://www.sci99.com/info/3_1000008_45579922.html',  # 2026-09-16
+    'https://www.sci99.com/info/3_1000008_45567093.html',  # 2026-09-15
+    'https://www.sci99.com/info/3_1000008_45556950.html',  # 2026-09-14
+    'https://www.sci99.com/info/3_1000008_45543577.html',  # 2026-09-11
 ]
 
 PRODUCTS = {
@@ -138,6 +148,32 @@ def fetch_articles():
         browser.close()
     return extracted
 
+def _num(v):
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        return float(v)
+    s = str(v).replace(',', '').strip()
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def _repair(ex, row, tol=0.01):
+    """Overwrite 最低价/最高价/平均价 of an existing date when the freshly
+    parsed values differ (repairs rows imported as raw/unformatted legacy
+    cells, e.g. 46167 stored where the old tab displayed 25.5)."""
+    changed = False
+    for c in (5, 6, 7):
+        new_v = _num(row[c]) if c < len(row) else None
+        if new_v is None:
+            continue
+        old_v = _num(ex[c]) if c < len(ex) else None
+        if old_v is None or abs(old_v - new_v) > tol:
+            ex[c] = row[c]
+            changed = True
+    return changed
+
+
 def update_sheet(name, new_by_date, width):
     tab = TABS.get(name)
     if not tab:
@@ -147,21 +183,26 @@ def update_sheet(name, new_by_date, width):
     sh = gspread.authorize(creds).open_by_key(SID)
     ws = sh.worksheet(tab)
     old = newsheet_lib.read_formula_rows(ws, 3, width)
-    existing = set()
+    existing = {}
     for r in old:
         d = norm_date(r[0])
         if d:
-            existing.add(d)
-    added = []
+            existing[d] = r
+    added, repaired = [], []
     final_rows = []
     for d, row in new_by_date.items():
-        if d in existing:
+        ex = existing.get(d)
+        if ex is not None:
+            if _repair(ex, row):
+                repaired.append(d)
             continue
         rr = list(row) + [''] * (width - len(row))
         final_rows.append(rr)
         added.append(d)
-        existing.add(d)
+        existing[d] = rr
     newsheet_lib.write_tab(ws, final_rows + old, 3, width)
+    if repaired:
+        print(f'{tab}: REPAIRED {len(repaired)} {sorted(repaired, key=date_key, reverse=True)}')
     print(f'{tab}: added {len(added)} {sorted(added, key=date_key, reverse=True)}; total {len(final_rows) + len(old)}')
     return len(added)
 

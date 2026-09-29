@@ -70,6 +70,38 @@ def carry_over(new_rows, old_rows, cols=(10, 16)):
     return new_rows
 
 
+def _num(v):
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        return float(v)
+    if isinstance(v, str):
+        s = v.replace(',', '').strip()
+        if s.startswith('(') and s.endswith(')'):
+            s = '-' + s[1:-1]
+        try:
+            return float(s)
+        except ValueError:
+            return None
+    return None
+
+
+def avg_issues(rows, tol=0.01):
+    """Rows whose 平均价 (col7) is not (最低价+最高价)/2.
+
+    Catches values written from an UNFORMATTED cell of the legacy sheets,
+    where the stored number differs from what the old tab displayed
+    (46167 stored vs 25.5 displayed)."""
+    bad = []
+    for r in rows:
+        if len(r) < 8:
+            continue
+        f, g, h = _num(r[5]), _num(r[6]), _num(r[7])
+        if None in (f, g, h):
+            continue
+        if abs(h - (f + g) / 2) > tol:
+            bad.append((date_text(r[0]) or str(r[0]), f, g, h, round((f + g) / 2, 4)))
+    return bad
+
+
 def dedupe_sorted(rows, width):
     """Pad to width, normalize date text, keep first row per date, sort desc."""
     seen, ded = set(), []
@@ -203,6 +235,12 @@ def write_tab(ws, rows, first_data_row=3, width=17):
     Returns (n_written, had_changes).
     """
     ded = dedupe_sorted(rows, width)
+
+    bad = avg_issues(ded)
+    if bad:
+        sample = ', '.join(f'{d}: H={h} != (F+G)/2={m}' for d, f, g, h, m in bad[:5])
+        print(f'  WARN avg != (min+max)/2 on {len(bad)} row(s): {sample}'
+              f'{" ..." if len(bad) > 5 else ""}')
 
     p8, p9, tpl, vt = _scan(ws, first_data_row, width)
 
