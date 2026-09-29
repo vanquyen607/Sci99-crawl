@@ -22,5 +22,9 @@ scripts/logs/
 logs/
 *.log
 
+# --- data cache sinh tự động (daily_sync ghi lại mỗi lần chạy) ---
+scripts/mcp_cjj_articles.json
+scripts/mcp_sw_price_history.json
+
 # --- archive one-off (chứa creds + data scrape cũ) ---
 scripts/_archive/
