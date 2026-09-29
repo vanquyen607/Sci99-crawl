@@ -14,6 +14,7 @@ COOKIES = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'sci99_cookie
 import newsheet_lib
 
 ARTICLES = [
+    'https://www.sci99.com/info/3_1000008_45679433.html',  # 2026-09-29
     'https://www.sci99.com/info/3_1000008_45667839.html',  # 2026-09-28
     'https://www.sci99.com/info/3_1000008_45655299.html',  # 2026-09-24
     'https://www.sci99.com/info/3_1000008_45644310.html',  # 2026-09-23
@@ -25,7 +26,6 @@ ARTICLES = [
     'https://www.sci99.com/info/3_1000008_45579922.html',  # 2026-09-16
     'https://www.sci99.com/info/3_1000008_45567093.html',  # 2026-09-15
     'https://www.sci99.com/info/3_1000008_45556950.html',  # 2026-09-14
-    'https://www.sci99.com/info/3_1000008_45543577.html',  # 2026-09-11
 ]
 
 PRODUCTS = {
