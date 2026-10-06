@@ -289,22 +289,6 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
                 except Exception:
                     pass
 
-    def _remap_widgets(self, w, mapping):
-        if not mapping:
-            return
-        for opt in self._REMAP_OPTS:
-            try:
-                v = w.cget(opt)
-            except Exception:
-                continue
-            if v in mapping:
-                try:
-                    w.config(**{opt: mapping[v]})
-                except Exception:
-                    pass
-        for ch in w.winfo_children():
-            self._remap_widgets(ch, mapping)
-
     # ---------- helpers: styles / widgets ----------
     def _post(self, fn, *args):
         self._ui_q.put((fn, args))
@@ -335,7 +319,7 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
 
     def _build_styles(self):
         style = getattr(self, 'style', None) or ttk.Style(self)
-        theme = (BS_THEMES.get(self._theme, 'litera') if HAS_BS else 'clam')
+        theme = (BS_THEMES.get(self._theme, BS_THEMES['light']) if HAS_BS else 'clam')
         try:
             style.theme_use(theme)
         except Exception:
@@ -343,6 +327,11 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
                 style.theme_use('clam')
             except Exception:
                 pass
+        # theme_use() overwrites the root bg with the bootstrap color → keep palette
+        try:
+            self.configure(bg=C['bg'])
+        except Exception:
+            pass
         # Notebook tabs
         style.configure('TNotebook', background=C['bg'], borderwidth=0, padding=0)
         style.configure('TNotebook.Tab', background=C['tab_bg'], foreground=C['muted'],

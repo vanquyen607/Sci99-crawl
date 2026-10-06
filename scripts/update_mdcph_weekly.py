@@ -3,14 +3,13 @@
 Pure requests (vip.sci99.com APIs) + pymupdf — no browser.
 Non-core step: SKIP (exit 0) when no new report.
 """
-import sys, io, os, re, json, html, time
+import sys, io, os, re, json, time
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace', line_buffering=True)
 from datetime import datetime
 import requests
 import gspread
 from google.oauth2.service_account import Credentials
-from openpyxl.utils import get_column_letter
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 COOKIES = os.path.join(HERE, 'sci99_cookies.json')
@@ -45,14 +44,6 @@ def session():
     for c in json.load(open(COOKIES, encoding='utf-8')):
         s.cookies.set(c['name'], c['value'], domain=c.get('domain', '.sci99.com'))
     return s
-
-
-def fmt_pct(cur, prev):
-    if not prev:
-        return '0,00%'
-    p = (cur - prev) / prev * 100
-    a = f'{abs(p):.2f}'.replace('.', ',')
-    return f'-{a}%' if p < 0 else f'{a}%'
 
 
 def main():

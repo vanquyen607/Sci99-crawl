@@ -15,11 +15,10 @@ behind by the previous, longer block when old_end says the block shrank.
 import io
 import os
 import sys
-from datetime import datetime
 
 if __name__ == '__main__' and __package__ is None:
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import newsheet_lib as NS
 import raw_lib as RL

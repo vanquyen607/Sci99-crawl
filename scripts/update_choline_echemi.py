@@ -3,13 +3,12 @@
 injected verification cookies) and append new dates into sheet 氯化胆碱 block2 (col T/19).
 Non-core step: SKIP (exit 0) when blocked or no new data.
 """
-import sys, io, os, re, json, time, random
+import sys, io, os, json, time, random
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace', line_buffering=True)
 from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
-from openpyxl.utils import get_column_letter
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CREDS = r'C:\Users\DELL\.openclaw\workspace\secrets\service_account.json'
@@ -58,23 +57,6 @@ def parse_date(s):
 
 def date_key(s):
     return parse_date(s) or datetime(1900, 1, 1)
-
-
-def fmt_change(v):
-    a = f'{abs(v):.2f}'.replace('.', ',')
-    if v < 0:
-        return f'-{a} '
-    if v == 0:
-        return ' 0,00 '
-    return f' {a} '
-
-
-def fmt_pct(cur, prev):
-    if not prev:
-        return '0,00%'
-    p = (cur - prev) / prev * 100
-    a = f'{abs(p):.2f}'.replace('.', ',')
-    return f'-{a}%' if p < 0 else f'{a}%'
 
 
 CHROME_EXE = r'C:\Program Files\Google\Chrome\Application\chrome.exe'

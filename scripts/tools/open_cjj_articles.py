@@ -10,15 +10,6 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 COOKIES = os.path.join(ROOT, 'sci99_cookies.json')
 OUT = os.path.join(ROOT, 'mcp_cjj_articles.json')
 
-# From search onclick jumpToPath
-PATHS = [
-    '/info/3_1000008_45653428.html',
-    '/info/3_1000008_45643686.html',
-    '/info/3_1000008_45632935.html',
-    '/info/3_1000008_45622553.html',
-    '/info/3_1000008_45610186.html',
-]
-
 with open(COOKIES, encoding='utf-8') as f:
     cookies = json.load(f)
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'

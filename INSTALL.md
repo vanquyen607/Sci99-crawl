@@ -81,11 +81,11 @@ D:\Desktop\sci99\
     ├── update_raw_sci99.py            # 6 tab
     ├── update_raw_sci99_pdf.py        # 2 tab
     ├── update_raw_cnbg.py             # 1 tab
-    ├── repair_100ppi_leaks.py         # one-off dọn row leak (không daily)
     ├── verify_all_status.py           # batched status 33 + 50 tab
     ├── sci99_gui.py / app_config.py / app_settings.json / Mo app.bat
     ├── diid_mapping.json, sci99_cookies.json, echemi_cookies.json, mcp_*.json
     ├── tools\                         # Maintenance one-off (không daily)
+    │   ├── repair_100ppi_leaks.py     # one-off dọn row leak (không daily)
     │   ├── scan_duplicate_dates.py    # --fix: ngày trùng
     │   ├── format_vit_palm_sheet.py
     │   ├── format_mdcph_weekly_sheet.py
@@ -130,4 +130,4 @@ Nếu bạn muốn, tôi có thể tạo file `logs/` cấu trúc và các helpe
 - FX steps: `update_fx_sheet.py` (汇率 sheet) + `update_fx_rate.py` (cột 汇率/USD của **cả 2 sheet**, chỉ fill ô trống — PHẢÍ chạy cuối để heal row mới).
 - Bước cuối: `verify_all_status.py` — đối chiếu 33 + 50 tab bằng `values_batch_get` (batched, ~6 call).
 - GUI tab 🩺 Sức khỏe đọc cùng nguồn `verify_all_status.collect_all()` và tự làm mới mỗi 5 phút.
-- One-off/repair scripts (`repair_100ppi_leaks.py`, `scripts\_archive\`, `scripts\tools\`) — không đưa vào daily.
+- One-off/repair scripts (`scripts\_archive\`, `scripts\tools\`) — không đưa vào daily.

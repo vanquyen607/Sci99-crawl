@@ -34,9 +34,6 @@ def parse_date(s):
             pass
     return None
 
-def to_mdY(d):
-    return f'{d.month}/{d.day}/{d.year}'
-
 def find_date_cols(rows, sample_rows=12, start_ri=3):
     """Find columns that look like date headers/data starts."""
     date_cols = {}
@@ -47,26 +44,6 @@ def find_date_cols(rows, sample_rows=12, start_ri=3):
                 if i not in date_cols:
                     date_cols[i] = v
     return sorted(date_cols.keys())
-
-def block_width_for(sheet, start, date_cols):
-    """Infer width: next date col - start, or default."""
-    later = [c for c in date_cols if c > start]
-    if later:
-        return later[0] - start - 1  # often 1 col gap? actually blocks abut: 0 and 18 => width 17
-        # for 0 and 18: width = 18 - 0 = 18? No, cols 0-16 width 17, col17 empty, col18 next
-        # so width = next_start - start - gap. gap usually 0 or 1.
-        # safer: next_start - start, then shrink trailing empties later.
-    # special cases
-    if sheet == '维生素':
-        if start == 109:
-            return 18
-        return 17
-    if sheet == '棕榈油':
-        return 10
-    if sheet == '氯化胆碱':
-        # B2 starts at 19
-        return 17
-    return DEFAULT_WIDTH
 
 def infer_width(sheet, start, all_date_cols, rows):
     if sheet == '汇率':

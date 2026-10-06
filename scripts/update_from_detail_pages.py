@@ -276,37 +276,6 @@ def parse_history(raw_rows, product, market, spec, layout='standard', swap_mk=Fa
         out[d] = row
     return out
 
-def read_block(rows, start, width, first_data_row=4):
-    out = []
-    for r in rows[first_data_row - 1:]:
-        rr = list(r) + [''] * (start + width - len(r))
-        block = rr[start:start + width]
-        if any(str(x).strip() for x in block):
-            out.append(block)
-    return out
-
-def write_block(ws, start, width, data, first_data_row=4):
-    data = [list(r)[:width] + [''] * (width - len(r)) for r in data]
-    data.sort(key=lambda r: date_key(r[0]) if r and r[0] else datetime(1900, 1, 1), reverse=True)
-    # safety: keep first row per date (stable sort keeps new row ahead of old)
-    seen = set()
-    deduped = []
-    for r in data:
-        k = norm_date(r[0]) if r and r[0] else ''
-        if k:
-            if k in seen:
-                continue
-            seen.add(k)
-        deduped.append(r)
-    data = deduped
-    col1 = start + 1
-    end_row = max(ws.row_count, len(data) + 20)
-    rng = gspread.utils.rowcol_to_a1(first_data_row, col1) + ':' + gspread.utils.rowcol_to_a1(end_row, col1 + width - 1)
-    ws.batch_clear([rng])
-    if data:
-        ws.update(data, gspread.utils.rowcol_to_a1(first_data_row, col1), value_input_option='USER_ENTERED')
-    return len(data)
-
 def main():
     creds = Credentials.from_service_account_file(CREDS_PATH, scopes=['https://www.googleapis.com/auth/spreadsheets'])
     gc = gspread.authorize(creds)

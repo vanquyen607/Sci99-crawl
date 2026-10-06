@@ -3,7 +3,6 @@
 import sys, io, re
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', line_buffering=True)
 from datetime import datetime
-from collections import Counter
 import gspread
 from google.oauth2.service_account import Credentials
 
@@ -74,25 +73,6 @@ def fmt_price(v):
         return str(int(round(v)))
     # keep up to 2 decimals
     s = f'{v:.2f}'.rstrip('0').rstrip('.')
-    return s
-
-def fmt_pct_from_ratio(r):
-    """r is float ratio like -0.005 -> '-0,50%' keep EU style used in sheet? user said price plain; pct can stay."""
-    if r is None:
-        return ''
-    pct = r * 100
-    # sheet uses comma decimal in 比例 e.g. -0,50%
-    if abs(pct - round(pct, 2)) < 1e-9:
-        s = f'{pct:.2f}'.rstrip('0').rstrip('.')
-    else:
-        s = f'{pct:.2f}'
-    if '.' in s:
-        s = s.replace('.', ',')
-    if ',' in s:
-        # ensure 2 decimal places for consistency if had decimals
-        if not re.search(r',\d{2}$', s):
-            s = s + '0' if s.endswith(',') else (s + '00' if ',' in s else s)
-            # fix: better format directly
     return s
 
 def fmt_pct(v):

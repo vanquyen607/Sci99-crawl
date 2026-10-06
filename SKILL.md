@@ -37,7 +37,6 @@ D:\Desktop\sci99\
 │   ├── update_raw_sci99.py       # 6 tab prices.sci99 detail
 │   ├── update_raw_sci99_pdf.py   # 2 tab vip.sci99 weekly PDF
 │   ├── update_raw_cnbg.py        # 1 tab chinabgao 三甲胺
-│   ├── repair_100ppi_leaks.py    # one-off: dọn row leak/trader sai (không daily)
 │   ├── verify_all_status.py      # batched status 33 + 50 tab (GUI import collect_all)
 │   ├── sci99_gui.py               # GUI 6 tab (Dashboard / Sức khỏe / Dữ liệu / Chạy sync / Cài đặt / Logs), theme ttkbootstrap
 │   ├── app_config.py
@@ -49,6 +48,7 @@ D:\Desktop\sci99\
 │   ├── mcp_cjj_articles.json
 │   ├── mcp_sw_price_history.json
 │   ├── tools\                     # Maintenance one-off (không chạy daily)
+│   │   ├── repair_100ppi_leaks.py   # one-off: dọn row leak/trader sai (không daily)
 │   │   ├── scan_duplicate_dates.py    # --fix: xóa ngày trùng per block
 │   │   ├── format_vit_palm_sheet.py   # EU→plain, drop future, sort, dedupe 维生素/棕榈油
 │   │   ├── format_mdcph_weekly_sheet.py

@@ -121,10 +121,6 @@ def fmt_pct_str(raw):
     s = f'{v:.2f}'.replace('.', ',')
     return s + '%'
 
-def looks_pct(v):
-    v = str(v or '').strip()
-    return bool(v) and ('%' in v or re.fullmatch(r'-?\d+,\d+%?', v.replace(' ', '')))
-
 def convert_rest(v):
     """Convert remaining EU-looking numerics (汇率/折美金/...) to plain."""
     if v is None:

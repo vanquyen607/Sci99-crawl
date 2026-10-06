@@ -33,7 +33,6 @@ SID_RAW = '1pnDkBjLjfXgNE-Qv7rU7risEfcM3y4f4nd-OTN9XEu0'
 SIDS = (('raw', SID_RAW), ('old', SID))   # processed in this order
 DATE_RE = re.compile(r'^\d{1,2}/\d{1,2}/\d{4}$')
 API = 'https://www.shibor.net.cn/ags/ms/cm-u-bk-ccpr/CcprHisNew'
-APPLY = True
 MAX_DAYS_PER_CALL = 180
 HEADER_SCAN_ROWS = 4
 BATCH = 500          # ranges per batch_update call
