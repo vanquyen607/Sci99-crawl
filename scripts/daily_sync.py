@@ -4,7 +4,7 @@ Run by Windows Task Scheduler (see daily_sync.bat).
 
 Sheets:
   old = 1kuN8... (33 tabs, legacy per-product scripts)
-  raw = 1pnDkB... (50 data tabs + 3 index tabs, scripts/update_raw_*.py)
+  raw = 1pnDkB... (51 data tabs + 3 index tabs, scripts/update_raw_*.py)
 Order matters: the raw updaters run before update_fx_rate.py, which heals the
 汇率/USD column of BOTH sheets last (its stamp only fills empty cells).
 """
@@ -88,7 +88,7 @@ def main():
     # 5f) 发酵豆粕 50% 营口 (mysteel chart API, 1y daily)
     results['fsb'] = run('update_fsb_mysteel.py', ['update_fsb_mysteel.py'], timeout=180)
 
-    # ---- raw sheet (1pnDkB...): 50 data tabs, one batch write each ----------
+    # ---- raw sheet (1pnDkB...): 51 data tabs, one batch write each ----------
     # 6) 100ppi 26 tabs (playwright; strict trader filter — a tab whose 备注
     #    trader has no row on the page is skipped, never mixed with another)
     results['raw_100ppi'] = run('update_raw_100ppi.py', ['update_raw_100ppi.py'], timeout=900)
@@ -102,7 +102,8 @@ def main():
     # 9) vip.sci99 weekly PDF 2 tabs (磷酸一铵/二铵; skips when no new report)
     results['raw_sci99_pdf'] = run('update_raw_sci99_pdf.py', ['update_raw_sci99_pdf.py'], timeout=300)
 
-    # 10) chinabgao 三甲胺 (山东, picks the row nearest the sheet's latest price)
+    # 10) chinabgao 三甲胺 2 tabs (鲁西化工 / 国产99.99%; the newest article on
+    #     the index is read, a series absent that day is skipped, never mixed)
     results['raw_cnbg'] = run('update_raw_cnbg.py', ['update_raw_cnbg.py'], timeout=180)
 
     # 11) FX rates (shibor 历史数据): 汇率 sheet 25 pairs + USD col (汇率/USD)

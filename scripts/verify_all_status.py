@@ -2,7 +2,7 @@
 """Verify recent rows + status of every data tab in BOTH spreadsheets.
 
 old = 1kuN8...  33 tabs written by the legacy per-product scripts (dates are M/D/YYYY text)
-raw = 1pnDkB... 50 data tabs + 3 index tabs written by scripts/update_raw_*.py
+raw = 1pnDkB... 51 data tabs + 3 index tabs written by scripts/update_raw_*.py
                 (dates are serial numbers, 汇率/USD in a formula column)
 
 Reads are batched: 1 worksheets() call per sheet plus values_batch_get in
@@ -204,16 +204,16 @@ def _report(label, tabs, extra_src=False):
 
 
 def main():
-    print('=== OLD (33 tabs) ===')
     data = collect_all()
-    _report('OLD (33 tabs)', data['old'])
-    print('=== RAW (50 data tabs) ===')
-    _report('RAW (50 data tabs)', data['raw'], extra_src=True)
+    print(f"=== OLD ({len(data['old'])} tabs) ===")
+    _report(f"OLD ({len(data['old'])} tabs)", data['old'])
+    print(f"=== RAW ({len(data['raw'])} data tabs) ===")
+    _report(f"RAW ({len(data['raw'])} data tabs)", data['raw'], extra_src=True)
 
     # Format samples: top 3 rows of a few representative tabs (formulas shown)
     print('=== FORMAT SAMPLES (header+2 rows, cols 0-11) ===')
     for label, sid, tabs in (('old', OLD_SID, ['维生素B1_sci99', '赖氨酸70_河北_sci99']),
-                             ('raw', RAW_SID, ['维生素E_sci99', '玉米淀粉_100ppi', '三甲胺_cnbg'])):
+                             ('raw', RAW_SID, ['维生素E_sci99', '玉米淀粉_100ppi', '三甲胺_鲁西化工_cnbg'])):
         sh = with_retry(lambda s=sid: client().open_by_key(s))
         grid, _ = fetch(sh, tabs, render='FORMULA')
         for t in tabs:

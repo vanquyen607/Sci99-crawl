@@ -1,6 +1,6 @@
 # Sci99-crawl
 
-Crawler sci99.com + echemi/mysteel/100ppi → Google Sheets (2 spreadsheet: 33 tab cũ + 50 tab mới), tự đồng bộ hằng ngày qua Windows Task Scheduler, kèm app GUI điều khiển (theme ttkbootstrap, tab 🩺 Sức khỏe theo dõi cả 2 sheet).
+Crawler sci99.com + echemi/mysteel/100ppi → Google Sheets (2 spreadsheet: 33 tab cũ + 51 tab mới), tự đồng bộ hằng ngày qua Windows Task Scheduler, kèm app GUI điều khiển (theme ttkbootstrap, tab 🩺 Sức khỏe theo dõi cả 2 sheet).
 
 ## Chạy
 
@@ -11,7 +11,7 @@ Crawler sci99.com + echemi/mysteel/100ppi → Google Sheets (2 spreadsheet: 33 t
 | Lịch tự động | Task Scheduler `sci99-sheets-daily` — sửa trong tab ⚙ Cài đặt của GUI |
 
 - GUI phím tắt: `F5` làm mới · `F6` chạy sync · `Esc` dừng
-- Tab 🩺 Sức khỏe: 33 + 50 tab, tự đọc batch mỗi 5 phút (cần `pip install ttkbootstrap`)
+- Tab 🩺 Sức khỏe: 33 + 51 tab, tự đọc batch mỗi 5 phút (cần `pip install ttkbootstrap`)
 - Log: `scripts/logs/daily_*.log`
 
 ## Cấu trúc
@@ -26,7 +26,7 @@ scripts/
   raw_lib.py            shared write/read sheet mới (write_all + dọn đuôi block)
   update_raw_*.py       5 updater sheet mới (100ppi / echemi / sci99 / PDF / chinabgao)
   update_*.py           các updater sheet cũ theo nguồn
-  verify_all_status.py  đối chiếu 33 + 50 tab (batch, GUI import collect_all)
+  verify_all_status.py  đối chiếu 33 + 51 tab (batch, GUI import collect_all)
 ```
 
 Phụ thuộc: `pip install playwright gspread google-auth pandas openpyxl requests pymupdf ttkbootstrap`
@@ -47,4 +47,4 @@ Sheet đang ghi (cả 2 do `daily_sync.py` cập nhật trong 1 lần chạy):
 | | Spreadsheet ID | Nội dung |
 | --- | --- | --- |
 | Sheet cũ | `1kuN8rT9shOellupamis9iyb6CpZFaWpao4VLdzZnQQU` | 33 tab dữ liệu (script legacy) |
-| Sheet mới | `1pnDkBjLjfXgNE-Qv7rU7risEfcM3y4f4nd-OTN9XEu0` | 50 tab dữ liệu + 3 tab index (A1 = URL nguồn) |
+| Sheet mới | `1pnDkBjLjfXgNE-Qv7rU7risEfcM3y4f4nd-OTN9XEu0` | 51 tab dữ liệu + 3 tab index (A1 = URL nguồn) |

@@ -1,16 +1,21 @@
 # -*- coding: utf-8 -*-
-"""Update the chinabgao tab (三甲胺_cnbg) of the 原料 sheet.
+"""Update the two chinabgao tabs of the 原料 sheet (one tab per product series).
 
-Source is the index page listed in A1 (https://www.chinabgao.com/jiage/sanjiaan/):
-its single table holds the latest day's quotes
-    交货地 | 价格 | 产品名称 | 备注 | 产地/品牌 | 时间
-The tab's market is 山东, so the row whose 产地/品牌 matches is taken; when the
-source lists several of them the one closest to the sheet's latest price wins
-(the 9/11 row was recorded at 6650 while the page's 山东 quote read 6500).
-A row is added only when its date is newer than the tab's latest date, or when
-it revises that same date's price.
+Source: the index page stored in A1 (https://www.chinabgao.com/jiage/sanjiaan/)
+lists only today's 3 quotes, while its newest daily article can list up to 10
+(brands included). The article linked from the index is therefore the primary
+source; the index table itself is the fallback when no article can be read.
 
-Quota: one values_batch_get + one values_batch_update.
+Series matched by brand + spec, never substituted by another quote:
+    三甲胺_鲁西化工_cnbg <- 产地/品牌 contains 鲁西化工 (else 鲁西 with spec 99.9)
+    三甲胺_国产_cnbg     <- 产地/品牌 == 国产 and 备注 contains 99.99
+A series with no matching quote that day is skipped (SKIP in the log), so the
+tab keeps its own price line instead of inheriting a stranger's.
+
+A row is written only when its date is newer than the tab's latest date, or
+when it revises that same date's price.
+
+Quota: one values_batch_get + one values_batch_update (+2 HTTP GETs).
 """
 import io
 import html
@@ -28,9 +33,40 @@ import requests
 import newsheet_lib as NS
 import raw_lib as RL
 
-TAB = '三甲胺_cnbg'
+DEFAULT_URL = 'https://www.chinabgao.com/jiage/sanjiaan/'
+PRODUCT = '三甲胺'
 UA = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
                     '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'}
+ARTICLE_RE = re.compile(r'<a[^>]+href="([^"]*?/jiage/\d+\.html)"[^>]*>(.*?)</a>', re.S)
+DATE_RE = re.compile(r'(\d{4})年(\d{1,2})月(\d{1,2})日')
+
+
+def score_luxi(q):
+    """鲁西化工 series: the brand itself, else the plain 鲁西 99.9 row."""
+    brand = (q.get('产地/品牌') or '').strip()
+    note = (q.get('备注') or '')
+    if '30%' in note:
+        return 0
+    if '鲁西化工' in brand:
+        return 3
+    if brand == '鲁西' and '99.9' in note:
+        return 2
+    return 0
+
+
+def score_local(q):
+    """国产 series: only the 99.99%优等品 row (the 30% water solution never)."""
+    brand = (q.get('产地/品牌') or '').strip()
+    note = (q.get('备注') or '')
+    if brand == '国产' and '99.99' in note:
+        return 3
+    return 0
+
+
+SERIES = (
+    {'tab': '三甲胺_鲁西化工_cnbg', 'label': '鲁西化工', 'score': score_luxi},
+    {'tab': '三甲胺_国产_cnbg', 'label': '国产99.99%', 'score': score_local},
+)
 
 
 def clean(s):
@@ -68,34 +104,102 @@ def price_of(text):
     return float(m.group(1).replace(',', ''))
 
 
-def key_of(rows, meta):
-    old = RL.data_rows(rows, meta)
-    if not old:
+def spec_of(note):
+    """'优等品；含量99.99%' -> '99.99%', '99.9' -> '99.9', '纯品' -> '纯品'."""
+    n = str(note or '').strip()
+    m = re.search(r'\d+(?:\.\d+)?\s*%', n)
+    if m:
+        return m.group(0).replace(' ', '')
+    m = re.search(r'\d+\.\d+', n)
+    if m:
+        return m.group(0)
+    return n[:24]
+
+
+def get(url, referer=None):
+    headers = dict(UA)
+    if referer:
+        headers['Referer'] = referer
+    r = requests.get(url, headers=headers, timeout=30)
+    r.encoding = r.apparent_encoding or 'utf-8'
+    return r
+
+
+def newest_article(index_page):
+    """(date, url) of the newest dated article link, or None."""
+    best = None
+    for m in ARTICLE_RE.finditer(index_page):
+        href, txt = m.group(1), clean(m.group(2))
+        dm = DATE_RE.search(txt)
+        if not dm:
+            continue
+        try:
+            d = datetime(int(dm.group(1)), int(dm.group(2)), int(dm.group(3))).date()
+        except ValueError:
+            continue
+        if best is None or d > best[0]:
+            url = href if href.startswith('http') else 'https://www.chinabgao.com' + href
+            best = (d, url, txt)
+    return best
+
+
+def fetch_quotes(index_url):
+    """(quotes, note) - quotes from the newest article, else from the index."""
+    r = get(index_url)
+    if r.status_code != 200:
+        print(f'  index HTTP {r.status_code}')
+        return [], 'index HTTP %s' % r.status_code
+    art = newest_article(r.text)
+    if art:
+        for attempt in range(2):
+            try:
+                a = get(art[1], referer=index_url)
+            except requests.RequestException as e:
+                print(f'  article GET error {e}')
+                break
+            if a.status_code == 200:
+                rows = parse_table(a.text)
+                if rows:
+                    print(f'  source: article {art[0]} {art[1]} ({len(rows)} quotes)')
+                    return rows, f'article {art[0]}'
+                print(f'  article {art[1]} has no quote table')
+                break
+            print(f'  article HTTP {a.status_code} (attempt {attempt + 1})')
+        print('  fallback: index table')
+    else:
+        print('  no dated article link on index')
+    rows = parse_table(r.text)
+    print(f'  source: index table ({len(rows)} quotes)')
+    return rows, 'index'
+
+
+def pick(quotes, score, latest_price):
+    """(quote, price) of the best-scoring row, or None; ties go to the price
+    closest to the sheet's latest."""
+    cands = []
+    for q in quotes:
+        p = price_of(q.get('价格'))
+        s = score(q)
+        if p is None or s <= 0:
+            continue
+        cands.append((q, p, s))
+    if not cands:
         return None
-    k = old[0]
-    return {'name': k[1], 'spec': k[2], 'market': k[3], 'dtype': k[4],
-            'width': meta['width'], 'price_col': meta['price_col']}
+    top = [c for c in cands if c[2] == max(x[2] for x in cands)]
+    if len(top) == 1:
+        return top[0][0], top[0][1]
+    q, p, _ = min(top, key=lambda c: abs(c[1] - (latest_price or 0)))
+    return q, p
 
 
-def main():
-    sh = RL.open_sh()
-    grid = RL.read_grid(sh, [TAB])
-    rows = grid.get(TAB)
-    if not rows:
-        print('no data')
-        print('DONE raw_cnbg')
-        return
-    meta = RL.analyze(rows)
-    if meta is None:
-        print('no header row')
-        print('DONE raw_cnbg')
-        return
-    k = key_of(rows, meta)
-    if k is None:
-        print('no data rows')
-        print('DONE raw_cnbg')
-        return
+def col_of(meta, name, default=-1):
+    for i, h in enumerate(meta['header']):
+        if name in str(h):
+            return i
+    return default
 
+
+def latest_of(rows, meta):
     latest = None
     latest_price = None
     for r in RL.data_rows(rows, meta):
@@ -109,67 +213,110 @@ def main():
         if latest is None or dt > latest:
             latest = dt
             latest_price = RL._plain(r[meta['price_col']])
-    url = str(rows[0][0] or '').strip()
-    print(f'  {TAB}: latest {latest} price {latest_price}, rows {len(RL.data_rows(rows, meta))}')
-    print(f'  url {url}')
+    return latest, latest_price
 
-    r = requests.get(url, headers=UA, timeout=30)
-    r.encoding = r.apparent_encoding or 'utf-8'
-    quotes = parse_table(r.text)
-    if not quotes:
-        print('  no table on index page')
-        print('DONE raw_cnbg')
-        return
-    cands = []
-    for q in quotes:
-        p = price_of(q.get('价格'))
-        if p is None:
+
+def main():
+    sh = RL.open_sh()
+    tabs = [s['tab'] for s in SERIES]
+    grid = RL.read_grid(sh, tabs)
+    metas, latests = {}, {}
+    for s in SERIES:
+        rows = grid.get(s['tab'])
+        if not rows:
+            print(f"  {s['tab']}: no data")
             continue
-        cands.append((q, p))
-    print(f'  {len(cands)} quote(s): ' + '; '.join(
-        f"{q.get('产地/品牌')} {q.get('备注')} {p:g} @ {q.get('时间')}" for q, p in cands))
-    brand = [c for c in cands if c[0].get('产地/品牌', '').strip() == k['market']]
-    if not brand:
-        print(f"  WARN no {k['market']} row, falling back to all quotes")
-        brand = cands
-    q, price = min(brand, key=lambda c: abs(c[1] - (latest_price or 0)))
-    try:
-        d = datetime.strptime(q.get('时间', ''), '%Y-%m-%d').date()
-    except ValueError:
-        print('  bad time cell', repr(q.get('时间')))
-        print('DONE raw_cnbg')
-        return
-    print(f"  picked {q.get('交货地')} {q.get('产地/品牌')} {q.get('备注')} {price:g} @ {d}")
-
-    if latest and d < latest:
-        print('  SKIP: source date older than sheet latest')
-        print('DONE raw_cnbg')
-        return
-    if d == latest and latest_price is not None and price == latest_price:
-        print('  SKIP: newest quote already in the sheet')
+        meta = RL.analyze(rows)
+        if meta is None:
+            print(f"  {s['tab']}: no header row")
+            continue
+        metas[s['tab']] = meta
+        latests[s['tab']] = latest_of(rows, meta)
+        lp, price = latests[s['tab']]
+        print(f"  {s['tab']}: latest {lp} price {price}, "
+              f"rows {len(RL.data_rows(rows, meta))}")
+    if not metas:
         print('DONE raw_cnbg')
         return
 
-    fresh = [''] * k['width']
-    fresh[0] = f'{d.month}/{d.day}/{d.year}'
-    fresh[1], fresh[2], fresh[3], fresh[4] = k['name'], k['spec'], k['market'], k['dtype']
-    fresh[meta['price_col']] = price
-    fresh[8] = q.get('备注') or q.get('产地/品牌') or ''
-
-    built, meta2, err = RL.build(rows, [fresh], meta)
-    if err:
-        print(f'  FAIL: {err}')
+    index_url = str((grid.get(SERIES[0]['tab']) or [['']])[0][0] or '').strip() or DEFAULT_URL
+    print(f'  url {index_url}')
+    quotes, src = fetch_quotes(index_url)
+    if not quotes:
+        print('  no quotes on source')
         print('DONE raw_cnbg')
         return
-    old_n = len(RL.data_rows(rows, meta))
-    print(f'  rows {old_n} -> {len(built)}')
+    for q in quotes:
+        print(f"    {q.get('产地/品牌')} | {q.get('备注')} | "
+              f"{q.get('价格')} | {q.get('交货地')} | {q.get('时间')}")
+
+    built, first, old_end = {}, {}, {}
+    for s in SERIES:
+        tab = s['tab']
+        if tab not in metas:
+            continue
+        meta = metas[tab]
+        latest, latest_price = latests[tab]
+        picked = pick(quotes, s['score'], latest_price)
+        if picked is None:
+            print(f"  {tab}: SKIP no {s['label']} quote in {src}")
+            continue
+        q, price = picked
+        note = (q.get('备注') or '').strip()
+        loc = (q.get('交货地') or '').strip()
+        try:
+            d = datetime.strptime(q.get('时间', ''), '%Y-%m-%d').date()
+        except ValueError:
+            print(f'  {tab}: bad time cell {q.get("时间")!r} - SKIP')
+            continue
+        print(f"  {tab}: picked {loc} {q.get('产地/品牌')} {note} {price:g} @ {d}")
+        if latest and d < latest:
+            print(f'  {tab}: SKIP source date older than sheet latest {latest}')
+            continue
+        if d == latest and latest_price is not None and price == latest_price:
+            print(f'  {tab}: SKIP newest quote already in the sheet')
+            continue
+
+        width = meta['width']
+        fresh = [''] * width
+        fresh[0] = f'{d.month}/{d.day}/{d.year}'
+        c_name = col_of(meta, '产品名称', 1)
+        c_spec = col_of(meta, '规格型号', 2)
+        c_market = col_of(meta, '市场', 3)
+        c_type = col_of(meta, '数据类型', 4)
+        c_note = col_of(meta, '备注', width - 1)
+        if c_name >= 0:
+            fresh[c_name] = PRODUCT
+        if c_spec >= 0:
+            fresh[c_spec] = spec_of(note)
+        if c_market >= 0:
+            fresh[c_market] = (q.get('产地/品牌') or '').strip()
+        if c_type >= 0:
+            fresh[c_type] = '市场价'
+        fresh[meta['price_col']] = price
+        if c_note >= 0:
+            fresh[c_note] = ' '.join(x for x in (loc, note) if x)
+
+        out, meta2, err = RL.build(grid[tab], [fresh], meta)
+        if err:
+            print(f'  {tab}: FAIL {err}')
+            continue
+        old_n = len(RL.data_rows(grid[tab], meta))
+        print(f'  {tab}: rows {old_n} -> {len(out)}')
+        built[tab] = out
+        first[tab] = meta['first']
+        old_end[tab] = meta['first'] + old_n - 1
+
+    if not built:
+        print('nothing to write')
+        print('DONE raw_cnbg')
+        return
     if '--dry' in sys.argv:
-        print('[dry] would write 1 tab')
+        print(f'[dry] would write {len(built)} tab(s)')
         print('DONE raw_cnbg')
         return
-    RL.write_all(sh, {TAB: built}, {TAB: meta['first']},
-                 old_end={TAB: meta['first'] + old_n - 1})
-    print('wrote 1 tab in 1 call')
+    RL.write_all(sh, built, first, old_end=old_end)
+    print(f'wrote {len(built)} tab(s) in 1 call')
     print('DONE raw_cnbg')
 
 

@@ -93,7 +93,7 @@ STEPS = [
     ('update_raw_echemi.py',         'Raw: echemi 15 tab',       'raw_echemi',       False),
     ('update_raw_sci99.py',          'Raw: sci99 6 tab',         'raw_sci99',        False),
     ('update_raw_sci99_pdf.py',      'Raw: sci99 PDF 2 tab',     'raw_sci99_pdf',    False),
-    ('update_raw_cnbg.py',           'Raw: chinabgao 三甲胺',     'raw_cnbg',         False),
+    ('update_raw_cnbg.py',           'Raw: chinabgao 三甲胺 ×2',  'raw_cnbg',         False),
     ('update_fx_sheet.py',           '汇率 sheet 25 cặp',       'fx_sheet',         False),
     ('update_fx_rate.py',            'Cột 汇率/USD (all)',      'fx_usd_cols',      False),
     ('verify_all_status.py',         'Verify 2 sheet',           'verify',           False),
@@ -220,7 +220,7 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
             t = f"{int(sch.get('hour', 18)):02d}:{int(sch.get('minute', 30)):02d}"
         except Exception:
             t = '18:30'
-        return f'{len(self.sheets)} + 50 tab · 2 spreadsheet · sci99.com → Google Sheets · daily {t}'
+        return f'{len(self.sheets)} + 51 tab · 2 spreadsheet · sci99.com → Google Sheets · daily {t}'
 
     # ---------- theme (Light / Dark) ----------
     _REMAP_OPTS = ('bg', 'fg', 'activebackground', 'activeforeground', 'selectcolor',
@@ -638,7 +638,7 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
         cards.pack(fill='x', pady=(0, 10))
         self.hcards = {}
         for key, title in (('old', 'SHEET CŨ · 33 tab dữ liệu'),
-                           ('raw', 'SHEET MỚI · 50 tab dữ liệu')):
+                           ('raw', 'SHEET MỚI · 51 tab dữ liệu')):
             self.hcards[key] = self._health_card(cards, title)
             self.hcards[key]['outer'].pack(side='left', fill='both', expand=True,
                                            padx=(0, 8))

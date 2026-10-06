@@ -1,9 +1,9 @@
-# SCI99 → Google Sheets Autosync (2 spreadsheet: 33 tab + 50 tab)
+# SCI99 → Google Sheets Autosync (2 spreadsheet: 33 tab + 51 tab)
 
 Tự động lấy giá sci99.com / 100ppi / echemi / mysteel / chinabgao và ghi vào **2 spreadsheet**:
 
 - **sheet cũ** `1kuN8rT9shOellupamis9iyb6CpZFaWpao4VLdzZnQQU` — 33 tab dữ liệu (4 tab index chỉ là link), script legacy per-product
-- **sheet mới** `1pnDkBjLjfXgNE-Qv7rU7risEfcM3y4f4nd-OTN9XEu0` — 50 tab dữ liệu + 3 tab index (`SCI99`/`ECHEMI`/`100PPI`), ghi bởi `scripts/update_raw_*.py`
+- **sheet mới** `1pnDkBjLjfXgNE-Qv7rU7risEfcM3y4f4nd-OTN9XEu0` — 51 tab dữ liệu + 3 tab index (`SCI99`/`ECHEMI`/`100PPI`), ghi bởi `scripts/update_raw_*.py`
 
 Sort ngày giảm dần, anti-dup theo ngày. Cả 2 sheet đều được `daily_sync.py` cập nhật trong 1 lần chạy (18 bước).
 
@@ -36,8 +36,8 @@ D:\Desktop\sci99\
 │   ├── update_raw_echemi.py      # 15 tab echemi (CDP 9335 + chart score)
 │   ├── update_raw_sci99.py       # 6 tab prices.sci99 detail
 │   ├── update_raw_sci99_pdf.py   # 2 tab vip.sci99 weekly PDF
-│   ├── update_raw_cnbg.py        # 1 tab chinabgao 三甲胺
-│   ├── verify_all_status.py      # batched status 33 + 50 tab (GUI import collect_all)
+│   ├── update_raw_cnbg.py        # 2 tab chinabgao 三甲胺 (鲁西化工 / 国产99.99%)
+│   ├── verify_all_status.py      # batched status 33 + 51 tab (GUI import collect_all)
 │   ├── sci99_gui.py               # GUI 6 tab (Dashboard / Sức khỏe / Dữ liệu / Chạy sync / Cài đặt / Logs), theme ttkbootstrap
 │   ├── app_config.py
 │   ├── app_settings.json
@@ -64,7 +64,7 @@ D:\Desktop\sci99\
 1. Service Account: `C:\Users\DELL\.openclaw\workspace\secrets\service_account.json`
 2. Spreadsheet IDs:
    - sheet cũ `1kuN8rT9shOellupamis9iyb6CpZFaWpao4VLdzZnQQU` (33 tab)
-   - sheet mới `1pnDkBjLjfXgNE-Qv7rU7risEfcM3y4f4nd-OTN9XEu0` (50 tab + 3 index)
+   - sheet mới `1pnDkBjLjfXgNE-Qv7rU7risEfcM3y4f4nd-OTN9XEu0` (51 tab + 3 index)
    - (sheet very-old `1hmDLpYOALH8-Fu4pxG-VJZURDtz3Z2UzWwTPAOs230I` — archive, không ghi nữa)
 3. sci99 login: xem `scripts/app_settings.json` (file gitignored — tự ghi vào `login_sci99*.py` qua GUI tab ⚙ Cài đặt)
 4. Python: playwright, gspread, google-auth, requests, pandas, openpyxl, pymupdf, **ttkbootstrap** (GUI theme)
@@ -77,7 +77,7 @@ D:\Desktop\sci99\
 
 > Lưu ý: riêng sheet **汇率** dùng EU comma-decimal 4dp (`6,7489`), dates start row 2, footer 2 dòng cuối.
 
-### Sheet mới (50 tab dữ liệu + 3 tab index)
+### Sheet mới (51 tab dữ liệu + 3 tab index)
 
 Danh sách tab lấy động từ worksheet (mọi tab trừ `SCI99`/`ECHEMI`/`100PPI` — 3 tab index chỉ chứa link), xem `scripts/verify_all_status.py` khi cần. Nhóm nguồn:
 
@@ -87,7 +87,7 @@ Danh sách tab lấy động từ worksheet (mọi tab trừ `SCI99`/`ECHEMI`/`1
 | echemi (chart score, CDP 9335) | 15 | `update_raw_echemi.py` |
 | prices.sci99 detail | 6 | `update_raw_sci99.py` |
 | vip.sci99 weekly PDF (磷酸一铵/二铵) | 2 | `update_raw_sci99_pdf.py` |
-| chinabgao 三甲胺 | 1 | `update_raw_cnbg.py` |
+| chinabgao 三甲胺 (鲁西化工 + 国产99.99%) | 2 | `update_raw_cnbg.py` |
 
 Quy ước riêng của sheet mới:
 
@@ -144,13 +144,13 @@ python -X utf8 scripts\daily_sync.py
 12. `update_raw_echemi.py` — 15 tab (headless Chrome CDP 9335 + chart score)
 13. `update_raw_sci99.py` — 6 tab prices.sci99 detail (header-driven, spec/market filter)
 14. `update_raw_sci99_pdf.py` — 2 tab vip.sci99 PDF (SKIP khi chưa có report mới)
-15. `update_raw_cnbg.py` — 1 tab chinabgao 三甲胺 (chọn row gần giá hiện tại nhất)
+15. `update_raw_cnbg.py` — 2 tab chinabgao 三甲胺, mỗi tab 1 loại (`鲁西化工` / `国产99.99%`): đọc **article mới nhất** từ trang index A1 (index chỉ có 3报价, article tới 10); khớp theo `产地/品牌` + `备注`, ngày thiếu đúng loại → **skip**, không thay报价 khác
 
 **FX + verify (chạy sau cùng):**
 
 16. `update_fx_sheet.py` — 汇率 25 cặp (shibor 历史数据)
 17. `update_fx_rate.py` — cột 汇率/USD của **cả 2 sheet** (batch read, chỉ fill ô trống → heal row mới; PHẢI chạy sau 11–15)
-18. `verify_all_status.py` — status 33 + 50 tab (batched `values_batch_get`, best-effort, có thể 429)
+18. `verify_all_status.py` — status 33 + 51 tab (batched `values_batch_get`, best-effort, có thể 429)
 
 Exit code: 0 khi 2 bước core (`detail_pages` + `mcp`) OK — các bước còn lại best-effort.
 

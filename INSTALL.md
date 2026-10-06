@@ -80,8 +80,8 @@ D:\Desktop\sci99\
     ├── update_raw_echemi.py           # 15 tab
     ├── update_raw_sci99.py            # 6 tab
     ├── update_raw_sci99_pdf.py        # 2 tab
-    ├── update_raw_cnbg.py             # 1 tab
-    ├── verify_all_status.py           # batched status 33 + 50 tab
+    ├── update_raw_cnbg.py             # 2 tab (鲁西化工 / 国产99.99%)
+    ├── verify_all_status.py           # batched status 33 + 51 tab
     ├── sci99_gui.py / app_config.py / app_settings.json / Mo app.bat
     ├── diid_mapping.json, sci99_cookies.json, echemi_cookies.json, mcp_*.json
     ├── tools\                         # Maintenance one-off (không daily)
@@ -128,6 +128,6 @@ Nếu bạn muốn, tôi có thể tạo file `logs/` cấu trúc và các helpe
 - Core steps bắt buộc: `update_from_detail_pages.py` + `update_mcp_two_blocks.py` (exit 0 nếu 2 bước này OK; còn lại best-effort).
 - 5 updater sheet mới (`update_raw_*.py`) chạy **trước** bước FX.
 - FX steps: `update_fx_sheet.py` (汇率 sheet) + `update_fx_rate.py` (cột 汇率/USD của **cả 2 sheet**, chỉ fill ô trống — PHẢÍ chạy cuối để heal row mới).
-- Bước cuối: `verify_all_status.py` — đối chiếu 33 + 50 tab bằng `values_batch_get` (batched, ~6 call).
+- Bước cuối: `verify_all_status.py` — đối chiếu 33 + 51 tab bằng `values_batch_get` (batched, ~6 call).
 - GUI tab 🩺 Sức khỏe đọc cùng nguồn `verify_all_status.collect_all()` và tự làm mới mỗi 5 phút.
 - One-off/repair scripts (`scripts\_archive\`, `scripts\tools\`) — không đưa vào daily.

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Shared read/write helpers for the '原料' spreadsheet (50 data tabs).
+"""Shared read/write helpers for the '原料' spreadsheet (51 data tabs).
 
 Quota-friendly by design: one values_batch_get reads every tab we touch and
 one values_batch_update writes them all back, so a full updater run costs
@@ -7,7 +7,8 @@ one values_batch_update writes them all back, so a full updater run costs
 
 Layout facts this lib relies on (verified 2026-10-05):
 - row 1 = source URL, header row = first row containing '日期' (row 2, row 3 on
-  三甲胺_cnbg where rows 4-6 are blank), data starts at the first dated row.
+  三甲胺_鲁西化工_cnbg / 三甲胺_国产_cnbg where rows 4-6 are blank), data starts
+  at the first dated row.
 - width varies per tab: 9 (cnbg), 10 (棕榈油×3), 11 (most), 17 (维E/氯化胆碱/
   磷酸一铵/磷酸二铵/玉米淀粉 - the last keeps 备注 at col K, FX block at L..Q).
 - 涨跌/比例 live on the 平均价 column (H everywhere, F on cnbg) and read
