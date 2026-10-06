@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 """Fill/repair 汇率 USD (USD/CNY) columns across ALL sheets from shibor 历史数据.
 
+Both spreadsheets (原料 'raw', original 'old') are processed by default; pass
+one of those names to restrict the run.
+
 - FX-USD columns are discovered from each sheet's header row (cells containing
   '汇率'); each FX column uses its own block's 日期 column.
 - A cell is rewritten when it is empty, an error value (#N/A, #REF!, ...), or
@@ -10,6 +13,7 @@
 """
 import re
 import ssl
+import sys
 import time
 from datetime import datetime, timedelta
 
@@ -25,6 +29,8 @@ _SSL_CTX.verify_mode = ssl.CERT_NONE
 
 CREDS = r'C:\Users\DELL\.openclaw\workspace\secrets\service_account.json'
 SID = '1kuN8rT9shOellupamis9iyb6CpZFaWpao4VLdzZnQQU'
+SID_RAW = '1pnDkBjLjfXgNE-Qv7rU7risEfcM3y4f4nd-OTN9XEu0'
+SIDS = (('raw', SID_RAW), ('old', SID))   # processed in this order
 DATE_RE = re.compile(r'^\d{1,2}/\d{1,2}/\d{4}$')
 API = 'https://www.shibor.net.cn/ags/ms/cm-u-bk-ccpr/CcprHisNew'
 APPLY = True
@@ -146,6 +152,23 @@ def retry_call(fn, *args, **kwargs):
             raise
 
 
+def batch_read(sh, worksheets, chunk=30):
+    """{title: values} for every worksheet, one values_batch_get per chunk.
+
+    get_all_values() per tab costs ~90 read requests on the two sheets and
+    trips the per-minute read quota mid-run; batched ranges cost ~4.
+    """
+    out = {}
+    titles = [w.title for w in worksheets]
+    ranges = [f"'{w.title}'!A1:AZ{w.row_count}" for w in worksheets]
+    for i in range(0, len(ranges), chunk):
+        res = retry_call(sh.values_batch_get, ranges[i:i + chunk])
+        for t, v in zip(titles[i:i + chunk], res['valueRanges']):
+            out[t] = v.get('values', [])
+        time.sleep(SLEEP)
+    return out
+
+
 def find_header(vals):
     for i, row in enumerate(vals[:HEADER_SCAN_ROWS]):
         cells = [str(v).strip() for v in row]
@@ -166,20 +189,16 @@ def rate_for(pd, by_mdY):
     return None
 
 
-def main():
-    creds = Credentials.from_service_account_file(
-        CREDS, scopes=['https://www.googleapis.com/auth/spreadsheets'])
-    sh = gspread.authorize(creds).open_by_key(SID)
-
-    # 1) plan: discover FX cols + cells needing fill
+def run(sh):
+    # 1) plan: discover FX cols + cells needing fill (batched reads)
     plan = {}   # title -> (worksheet, [(fx_col, date_col)], [(ri, fx_col, pd)])
     min_d = max_d = None
     total_need = 0
-    for ws in sh.worksheets():
+    worksheets = [ws for ws in sh.worksheets() if ws.title != '汇率']
+    grids = batch_read(sh, worksheets)
+    for ws in worksheets:
         title = ws.title
-        if title == '汇率':
-            continue
-        vals = retry_call(ws.get_all_values)
+        vals = grids.get(title) or []
         hi, cells = find_header(vals)
         if hi is None:
             print(f'{title}: SKIP (no header row found)')
@@ -194,7 +213,6 @@ def main():
                 mapping.append((fc, max(dcs)))
         if not mapping or not date_cols:
             print(f'{title}: SKIP (date_cols={date_cols} fx_cols={fx_cols})')
-            time.sleep(SLEEP)
             continue
         targets = []
         for ri in range(hi + 1, len(vals)):
@@ -217,7 +235,6 @@ def main():
         plan[title] = (ws, mapping, targets)
         total_need += len(targets)
         print(f'{title}: header r{hi+1} fx={mapping} need={len(targets)}', flush=True)
-        time.sleep(SLEEP)
 
     if not total_need:
         print('nothing to fill')
@@ -299,6 +316,17 @@ def main():
     print(f'DONE wrote_total={grand_wrote} missed_total={len(grand_missed)}')
     if grand_missed:
         print('missed sample:', grand_missed[:15])
+
+
+def main():
+    creds = Credentials.from_service_account_file(
+        CREDS, scopes=['https://www.googleapis.com/auth/spreadsheets'])
+    only = [a for a in sys.argv[1:] if not a.startswith('-')]
+    for name, sid in SIDS:
+        if only and name not in only and sid not in only:
+            continue
+        print(f'=== {name} {sid}', flush=True)
+        run(gspread.authorize(creds).open_by_key(sid))
 
 
 if __name__ == '__main__':

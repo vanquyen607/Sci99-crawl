@@ -13,6 +13,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import app_config as cfg
 
+# ---------- theme library (bootstrap design templates) ----------
+try:
+    import ttkbootstrap as ttkbs
+    HAS_BS = True
+except Exception:
+    ttkbs = None
+    HAS_BS = False
+BS_THEMES = {'light': 'bootstrap-light', 'dark': 'bootstrap-dark'}
+
 # ---------- palettes: Light / Pro (default) + Dark ----------
 LIGHT = {
     'bg':       '#f4f6fa',   # app background
@@ -80,9 +89,14 @@ STEPS = [
     ('update_whey_sci99.py',         '乳清粉 (sci99 tuần)',      'whey',             False),
     ('update_inositol_100ppi.py',    '肌醇 100ppi',              'inositol',         False),
     ('update_fsb_mysteel.py',        '发酵豆粕 (mysteel)',       'fsb',              False),
+    ('update_raw_100ppi.py',         'Raw: 100ppi 26 tab',       'raw_100ppi',       False),
+    ('update_raw_echemi.py',         'Raw: echemi 15 tab',       'raw_echemi',       False),
+    ('update_raw_sci99.py',          'Raw: sci99 6 tab',         'raw_sci99',        False),
+    ('update_raw_sci99_pdf.py',      'Raw: sci99 PDF 2 tab',     'raw_sci99_pdf',    False),
+    ('update_raw_cnbg.py',           'Raw: chinabgao 三甲胺',     'raw_cnbg',         False),
     ('update_fx_sheet.py',           '汇率 sheet 25 cặp',       'fx_sheet',         False),
     ('update_fx_rate.py',            'Cột 汇率/USD (all)',      'fx_usd_cols',      False),
-    ('verify_all_status.py',         'Verify 33 sheet',         'verify',           False),
+    ('verify_all_status.py',         'Verify 2 sheet',           'verify',           False),
 ]
 _TS = r'^\[\d{2}:\d{2}:\d{2}\] '
 
@@ -149,7 +163,7 @@ SHEETS = [
     '棕榈油_天津24_sci99', '棕榈油_张家港52_sci99', '棕榈油_张家港24_sci99',
 ]
 
-class App(tk.Tk):
+class App(ttkbs.Window if HAS_BS else tk.Tk):
     def __init__(self):
         super().__init__()
         self.title('SCI99 Sheets Autosync')
@@ -167,6 +181,10 @@ class App(tk.Tk):
         self._status_gids = {}
         self._data_rows = []
         self._history_rows = []
+        self._health_rows = []
+        self._health_busy = False
+        self._health_next = 0.0
+        self._health_all = None
         self._theme = self.settings.get('theme', 'light')
         self._build_styles()
         self._build_header()
@@ -182,6 +200,8 @@ class App(tk.Tk):
         self.refresh_schedule_status()
         self.refresh_sheet_status()
         self.refresh_history()
+        self.nb.bind('<<NotebookTabChanged>>', self._on_tab_changed)
+        self.after(1000, self._health_tick)
 
     def _merge_sheets(self):
         """33 tab chuẩn = nguồn sự thật; đồng bộ về app_settings.json nếu lệch."""
@@ -200,7 +220,7 @@ class App(tk.Tk):
             t = f"{int(sch.get('hour', 18)):02d}:{int(sch.get('minute', 30)):02d}"
         except Exception:
             t = '18:30'
-        return f'{len(self.sheets)} sheet · sci99.com → Google Sheets · daily {t}'
+        return f'{len(self.sheets)} + 50 tab · 2 spreadsheet · sci99.com → Google Sheets · daily {t}'
 
     # ---------- theme (Light / Dark) ----------
     _REMAP_OPTS = ('bg', 'fg', 'activebackground', 'activeforeground', 'selectcolor',
@@ -220,16 +240,54 @@ class App(tk.Tk):
         old = dict(C)
         self._theme = theme
         if old != new:
+            mapping = {old[k]: new[k] for k in old if old[k] != new[k]}
+            # ttkbootstrap_theme recolors tk widgets on theme_use() → snapshot
+            # our colors first, then force the palette back afterwards.
+            snap = self._snapshot_widgets()
             C.clear()
             C.update(new)
             self._build_styles()
-            self._remap_widgets(self, {old[k]: new[k] for k in old if old[k] != new[k]})
+            self._force_remap(snap, mapping)
             if hasattr(self, 'tree_hist'):
                 for tag, color in (('ok', C['ok']), ('warn', C['warn']),
                                    ('err', C['err']), ('run', C['info'])):
                     self.tree_hist.tag_configure(tag, foreground=color)
+            if hasattr(self, 'tree_health'):
+                for tag, color in (('ok', C['ok']), ('warn', C['warn']),
+                                   ('err', C['err'])):
+                    self.tree_health.tag_configure(tag, foreground=color)
         if hasattr(self, 'btn_theme'):
             self.btn_theme.config(text='☀️  Light' if theme == 'dark' else '🌙  Dark')
+
+    def _snapshot_widgets(self):
+        snap = []
+
+        def walk(w):
+            rec = {}
+            for opt in self._REMAP_OPTS:
+                try:
+                    rec[opt] = w.cget(opt)
+                except Exception:
+                    pass
+            snap.append((w, rec))
+            for ch in w.winfo_children():
+                walk(ch)
+
+        walk(self)
+        return snap
+
+    def _force_remap(self, snap, mapping):
+        if not mapping:
+            return
+        for w, rec in snap:
+            for opt, v in rec.items():
+                nv = mapping.get(v)
+                if nv is None:
+                    continue
+                try:
+                    w.config(**{opt: nv})
+                except Exception:
+                    pass
 
     def _remap_widgets(self, w, mapping):
         if not mapping:
@@ -276,11 +334,15 @@ class App(tk.Tk):
         }
 
     def _build_styles(self):
-        style = ttk.Style(self)
+        style = getattr(self, 'style', None) or ttk.Style(self)
+        theme = (BS_THEMES.get(self._theme, 'litera') if HAS_BS else 'clam')
         try:
-            style.theme_use('clam')
+            style.theme_use(theme)
         except Exception:
-            pass
+            try:
+                style.theme_use('clam')
+            except Exception:
+                pass
         # Notebook tabs
         style.configure('TNotebook', background=C['bg'], borderwidth=0, padding=0)
         style.configure('TNotebook.Tab', background=C['tab_bg'], foreground=C['muted'],
@@ -429,16 +491,19 @@ class App(tk.Tk):
         self.nb = ttk.Notebook(wrap)
         self.nb.pack(fill='both', expand=True)
         self.tab_home = ttk.Frame(self.nb)
+        self.tab_health = ttk.Frame(self.nb)
         self.tab_data = ttk.Frame(self.nb)
         self.tab_run  = ttk.Frame(self.nb)
         self.tab_set  = ttk.Frame(self.nb)
         self.tab_logs = ttk.Frame(self.nb)
         self.nb.add(self.tab_home, text='  🏠  Dashboard  ')
+        self.nb.add(self.tab_health, text='  🩺  Sức khỏe  ')
         self.nb.add(self.tab_data, text='  📁  Dữ liệu  ')
         self.nb.add(self.tab_run,  text='  ▶  Chạy sync  ')
         self.nb.add(self.tab_set,  text='  ⚙  Cài đặt  ')
         self.nb.add(self.tab_logs, text='  📜  Logs  ')
         self._build_home()
+        self._build_health()
         self._build_data()
         self._build_run()
         self._build_settings()
@@ -557,6 +622,233 @@ class App(tk.Tk):
         self.tree_hist.configure(yscrollcommand=hsb2.set)
         self.tree_hist.pack(side='left', fill='both', expand=True, padx=(14, 0), pady=(0, 14))
         hsb2.pack(side='right', fill='y', padx=(0, 8), pady=(0, 14))
+
+    # ---------------- Sức khỏe 2 spreadsheet ----------------
+    HEALTH_MS = 5 * 60 * 1000          # tự làm mới mỗi 5 phút
+
+    def _build_health(self):
+        f = self.tab_health
+
+        bar = tk.Frame(f, bg=C['bg'])
+        bar.pack(fill='x', pady=(12, 8))
+        tk.Label(bar, text='🩺  Sức khỏe 2 spreadsheet', bg=C['bg'],
+                 fg=C['text'], font=FONT_H2).pack(side='left')
+        self.lbl_health_ts = tk.Label(bar, text='chưa tải', bg=C['bg'],
+                                      fg=C['muted'], font=FONT_S)
+        self.lbl_health_ts.pack(side='left', padx=(14, 0))
+        self.lbl_health_cd = tk.Label(bar, text='', bg=C['bg'], fg=C['muted'],
+                                      font=FONT_S)
+        self.lbl_health_cd.pack(side='left', padx=(10, 0))
+        self.btn(bar, '⟳  Làm mới', self.refresh_health, kind='primary').pack(side='right')
+        self.btn(bar, 'Sheet mới ↗', lambda: self._open_health_sheet('raw'),
+                 kind='ghost').pack(side='right', padx=(0, 6))
+        self.btn(bar, 'Sheet cũ ↗', lambda: self._open_health_sheet('old'),
+                 kind='ghost').pack(side='right')
+
+        cards = tk.Frame(f, bg=C['bg'])
+        cards.pack(fill='x', pady=(0, 10))
+        self.hcards = {}
+        for key, title in (('old', 'SHEET CŨ · 33 tab dữ liệu'),
+                           ('raw', 'SHEET MỚI · 50 tab dữ liệu')):
+            self.hcards[key] = self._health_card(cards, title)
+            self.hcards[key]['outer'].pack(side='left', fill='both', expand=True,
+                                           padx=(0, 8))
+
+        box = self.card(f, '📋  Chi tiết từng tab')
+        box.pack(fill='both', expand=True, pady=(0, 12))
+        body = box._body
+        hdr = tk.Frame(body, bg=C['surface'])
+        hdr.pack(fill='x', padx=14, pady=(0, 6))
+        self.lbl_health_count = tk.Label(hdr, text='', bg=C['surface'],
+                                         fg=C['muted'], font=FONT_S)
+        self.lbl_health_count.pack(side='left')
+        self.var_health_bad = tk.BooleanVar(value=False)
+        tk.Checkbutton(hdr, text='Chỉ hiện lỗi', variable=self.var_health_bad,
+                       command=self._render_health, bg=C['surface'], fg=C['text'],
+                       selectcolor=C['surface2'], activebackground=C['surface'],
+                       font=FONT_S).pack(side='right')
+        self.ent_health = self.entry(hdr, width=20)
+        self.ent_health.pack(side='right', padx=(8, 8))
+        self.ent_health.bind('<KeyRelease>', lambda e: self._render_health())
+        tk.Label(hdr, text='Lọc:', bg=C['surface'], fg=C['muted'],
+                 font=FONT_S).pack(side='right')
+
+        cols = ('sheet', 'tab', 'latest', 'rows', 'src', 'state')
+        self.tree_health = ttk.Treeview(body, columns=cols, show='headings',
+                                        height=12)
+        for c, w, t in [('sheet', 70, 'Sheet'), ('tab', 250, 'Tab'),
+                        ('latest', 105, 'Mới nhất'), ('rows', 65, 'Dòng'),
+                        ('src', 75, 'URL A1'), ('state', 240, 'Trạng thái')]:
+            self.tree_health.heading(c, text=t)
+            self.tree_health.column(c, width=w, anchor='w')
+        for tag, color in (('ok', C['ok']), ('warn', C['warn']), ('err', C['err'])):
+            self.tree_health.tag_configure(tag, foreground=color)
+        vsb = ttk.Scrollbar(body, orient='vertical', command=self.tree_health.yview)
+        self.tree_health.configure(yscrollcommand=vsb.set)
+        self.tree_health.pack(side='left', fill='both', expand=True,
+                              padx=(14, 0), pady=(0, 14))
+        vsb.pack(side='right', fill='y', padx=(0, 8), pady=(0, 14))
+        self.tree_health.bind('<Double-1>', self._open_health_row)
+
+    def _health_card(self, parent, title):
+        outer = tk.Frame(parent, bg=C['border'])
+        body = tk.Frame(outer, bg=C['surface'])
+        body.pack(fill='both', expand=True, padx=1, pady=1)
+        strip = tk.Frame(body, bg=C['accent'], height=5)
+        strip.pack(fill='x')
+        tk.Label(body, text=title, bg=C['surface'], fg=C['muted'],
+                 font=FONT_S).pack(anchor='w', padx=14, pady=(12, 0))
+        num = tk.Label(body, text='…', bg=C['surface'], fg=C['text'], font=FONT_NUM)
+        num.pack(anchor='w', padx=14, pady=(0, 2))
+        l1 = tk.Label(body, text='đang tải…', bg=C['surface'], fg=C['muted'],
+                      font=FONT_S)
+        l1.pack(anchor='w', padx=14, pady=(0, 2))
+        l2 = tk.Label(body, text='', bg=C['surface'], fg=C['muted'], font=FONT_S)
+        l2.pack(anchor='w', padx=14, pady=(0, 12))
+        return {'outer': outer, 'strip': strip, 'num': num, 'l1': l1, 'l2': l2}
+
+    def refresh_health(self):
+        self._health_next = time.time() + self.HEALTH_MS / 1000
+        if self._health_busy:
+            return
+        self._health_busy = True
+        if hasattr(self, 'lbl_health_ts'):
+            self.lbl_health_ts.config(text='đang đọc 2 sheet (batch)…', fg=C['info'])
+        threading.Thread(target=self._health_worker, daemon=True).start()
+
+    def _health_worker(self):
+        try:
+            import verify_all_status as vas
+            data = vas.collect_all()
+            now = datetime.now()
+            today = now.date()
+            rows, cards = [], {}
+            for key, label, tabs in (('old', 'OLD', data['old']),
+                                     ('raw', 'RAW', data['raw'])):
+                s = vas.summary(tabs)
+                n_today = sum(1 for t in tabs
+                              if t['latest'] and t['latest'].date() == today)
+                cards[key] = (s, n_today)
+                for t in tabs:
+                    state, tag = self._health_state(t, today)
+                    src = '' if t['src'] is None else ('ok' if t['src'] else 'THIẾU')
+                    latest = t['latest']
+                    rows.append((label, t['name'],
+                                 latest.strftime('%d/%m/%Y') if latest else '—',
+                                 str(t['rows']), src, state, tag))
+            ts = now.strftime('%H:%M:%S %d/%m/%Y')
+
+            def ui():
+                self._health_all = data
+                self._health_rows = rows
+                self._render_health()
+                for key, (s, n_today) in cards.items():
+                    card = self.hcards[key]
+                    bad = s['total'] - s['ok']
+                    latest = s['latest']
+                    stale = bool(latest and latest.date() < today)
+                    tone = C['err'] if bad else (C['warn'] if stale else C['ok'])
+                    card['num'].config(text=f"{s['ok']}/{s['total']}", fg=tone)
+                    card['strip'].config(bg=tone)
+                    card['l1'].config(
+                        text=('mới nhất ' + latest.strftime('%d/%m/%Y')) if latest
+                        else 'không có ngày')
+                    card['l2'].config(
+                        text=f'hôm nay {n_today}/{s["total"]} · lỗi {bad}')
+                self.lbl_health_ts.config(text=f'cập nhật {ts}', fg=C['muted'])
+                self._health_busy = False
+            self._post(ui)
+        except Exception as e:
+            def ui_err():
+                self._health_busy = False
+                self.lbl_health_ts.config(text=f'lỗi: {str(e)[:90]}', fg=C['err'])
+                if not self._health_rows:
+                    for i in self.tree_health.get_children():
+                        self.tree_health.delete(i)
+                    self.tree_health.insert('', 'end',
+                                            values=('—', str(e)[:60], '', '', '', ''))
+            self._post(ui_err)
+
+    @staticmethod
+    def _health_state(t, today):
+        if t['status'] == 'missing':
+            return '❌ tab không tồn tại', 'err'
+        if t['status'] == 'nodate':
+            return '❌ không thấy cột/ngày', 'err'
+        if t['src'] is False:
+            return '⚠ thiếu URL ở A1', 'warn'
+        days = (today - t['latest'].date()).days if t['latest'] else 9999
+        if days > 7:
+            return f'⚠ cũ {days} ngày', 'warn'
+        if days == 0:
+            return 'hôm nay', 'ok'
+        return f'{days} ngày trước', 'ok'
+
+    def _render_health(self):
+        tree = self.tree_health
+        for i in tree.get_children():
+            tree.delete(i)
+        try:
+            q = self.ent_health.get().strip().lower()
+        except Exception:
+            q = ''
+        only_bad = bool(self.var_health_bad.get()) if hasattr(self, 'var_health_bad') else False
+        shown = 0
+        for row in self._health_rows:
+            if q and q not in str(row[0]).lower() and q not in str(row[1]).lower():
+                continue
+            if only_bad and row[6] == 'ok':
+                continue
+            tags = () if row[6] == 'ok' else (row[6],)
+            tree.insert('', 'end', values=row[:6], tags=tags)
+            shown += 1
+        if hasattr(self, 'lbl_health_count'):
+            self.lbl_health_count.config(
+                text=f'{shown}/{len(self._health_rows)} tab', fg=C['muted'])
+        if not self._health_rows:
+            tree.insert('', 'end', values=('—', 'chưa tải', '', '', '', ''))
+
+    def _open_health_row(self, event=None):
+        sel = self.tree_health.selection()
+        if not sel:
+            return
+        which = str(self.tree_health.item(sel[0], 'values')[0]).lower()
+        self._open_health_sheet(which if which in ('old', 'raw') else 'raw')
+
+    def _open_health_sheet(self, which):
+        try:
+            import verify_all_status as vas
+            sid = vas.OLD_SID if which == 'old' else vas.RAW_SID
+        except Exception:
+            return
+        if not sid:
+            return
+        import webbrowser
+        webbrowser.open(f'https://docs.google.com/spreadsheets/d/{sid}')
+
+    def _on_tab_changed(self, event=None):
+        try:
+            if str(self.tab_health) != self.nb.select():
+                return
+            if self._health_rows and time.time() < self._health_next:
+                return
+            self.refresh_health()
+        except Exception:
+            pass
+
+    def _health_tick(self):
+        try:
+            if self._health_next:
+                left = int(max(0, self._health_next - time.time()))
+                if hasattr(self, 'lbl_health_cd'):
+                    self.lbl_health_cd.config(
+                        text=f'tự làm mới sau {left // 60}:{left % 60:02d}')
+                if time.time() >= self._health_next:
+                    self._health_next = 0.0
+                    self.refresh_health()
+        except Exception:
+            pass
+        self.after(1000, self._health_tick)
 
     # ---------------- status helpers ----------------
     @staticmethod
@@ -723,67 +1015,42 @@ class App(tk.Tk):
         try:
             import gspread
             from google.oauth2.service_account import Credentials
+            import verify_all_status as vas
             creds = Credentials.from_service_account_file(
                 self.settings['service_account_json'],
                 scopes=['https://www.googleapis.com/auth/spreadsheets'])
             sh = gspread.authorize(creds).open_by_key(self.settings['spreadsheet_id'])
+            try:
+                for ws in sh.worksheets():
+                    self._status_gids[ws.title] = ws.id
+            except Exception:
+                pass
+            # batched: 1 worksheets() + ~2 values_batch_get thay vì 33 get_all_values
+            self._post(self._status_progress, '● Đang đọc batch 33 sheet…', C['info'])
+            tabs = vas.collect_sheet(sh, vas.OLD_SHEETS, extra_src=False)
             now = datetime.now()
-            today_variants = {
-                f'{now.month}/{now.day}/{now.year}',
-                f'{now.month:02d}/{now.day:02d}/{now.year}',
-            }
-            n_today = 0
-            total_rows = 0
-            rows_out = []
-            total = len(self.sheets)
-            for idx, name in enumerate(self.sheets, 1):
-                ws, vals, err = None, None, ''
-                for attempt in range(4):        # 429 quota: backoff thay vì hiện ERR oan
-                    try:
-                        ws = sh.worksheet(name)
-                        vals = ws.get_all_values()
-                        err = ''
-                        break
-                    except Exception as e:
-                        err = str(e)
-                        if '429' in err or 'quota' in err.lower() or 'Rate Limit' in err:
-                            self._post(self._status_progress,
-                                       f'● 429 — đợi quota ({idx}/{total})…', C['warn'])
-                            # 15+30+45 = 90s > cửa sổ quota 60s/100 read
-                            time.sleep(min(60, 15 * (attempt + 1)))
-                            continue
-                        break
-                if vals is None:
-                    rows_out.append((name, 'ERR', '', '', err[:80]))
+            today = now.date()
+            rows_out, n_today, total_rows = [], 0, 0
+            for t in tabs:
+                total_rows += t['rows']
+                if t['status'] == 'missing':
+                    rows_out.append((t['name'], 'ERR', '', '', 'tab không tồn tại'))
                     continue
-                self._status_gids[name] = getattr(ws, 'id', None)
-                total_rows += len(vals)
-                if idx % 5 == 0 or idx == total:
-                    self._post(self._status_progress,
-                               f'● Đang tải sheet {idx}/{total}…', C['info'])
-                date_cols = {}
-                # new format: row0 URL, row1 header, row2 first data
-                sample = vals[1:12] if name == '汇率' else vals[2:12]
-                for r in sample:
-                    for i, v in enumerate(r):
-                        v = str(v).strip()
-                        if re.match(r'^\d{1,2}/\d{1,2}/\d{4}$', v):
-                            date_cols.setdefault(i, v)
-                def dk(s):
-                    try:
-                        return datetime.strptime(s, '%m/%d/%Y')
-                    except Exception:
-                        return datetime(1900, 1, 1)
-                if not date_cols:
-                    rows_out.append((name, 'NO DATE', str(len(vals)), '0', ''))
+                latest = t['latest']
+                if latest is None:
+                    rows_out.append((t['name'], 'NO DATE', str(t['rows']), '0', ''))
                     continue
-                best = max(date_cols.values(), key=dk)
-                nblocks = len(date_cols)
-                is_today = best in today_variants or best == f'{now.month}/{now.day}/{now.year}'
+                is_today = latest.date() == today
+                n_today += 1 if is_today else 0
                 if is_today:
-                    n_today += 1
-                note = '✅ hôm nay' if is_today else ('📅 ngày khác' if dk(best).year >= 2026 else '⚠ cũ')
-                rows_out.append((name, best, str(len(vals)), str(nblocks), note))
+                    note = '✅ hôm nay'
+                elif latest.year >= 2026:
+                    note = '📅 ngày khác'
+                else:
+                    note = '⚠ cũ'
+                rows_out.append((t['name'],
+                                 f'{latest.month}/{latest.day}/{latest.year}',
+                                 str(t['rows']), str(t['date_cols']), note))
 
             def ui():
                 self._status_rows = rows_out
@@ -804,6 +1071,8 @@ class App(tk.Tk):
         self.refresh_sheet_status()
         self.refresh_logs_list()
         self.refresh_history()
+        if self._health_rows or str(getattr(self, 'tab_health', '')) == self.nb.select():
+            self.refresh_health()
         if hasattr(self, 'lbl_sub'):
             self.lbl_sub.config(text=self._subtitle())
 

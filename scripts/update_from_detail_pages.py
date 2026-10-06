@@ -6,7 +6,8 @@ For each target block: open detail page by diid, parse full history table
 (date/min/max/avg as separate columns), add only missing dates, sort desc.
 """
 import sys, io, os, re, json, time
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+if __name__ == '__main__' and __package__ is None:
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials

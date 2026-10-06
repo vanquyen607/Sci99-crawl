@@ -1,6 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Daily orchestrator: login sci99 → update 27 tabs → verify.
+"""Daily orchestrator: login sci99 → update old sheet → update raw sheet → verify.
 Run by Windows Task Scheduler (see daily_sync.bat).
+
+Sheets:
+  old = 1kuN8... (33 tabs, legacy per-product scripts)
+  raw = 1pnDkB... (50 data tabs + 3 index tabs, scripts/update_raw_*.py)
+Order matters: the raw updaters run before update_fx_rate.py, which heals the
+汇率/USD column of BOTH sheets last (its stamp only fills empty cells).
 """
 import sys, io, os, subprocess, time, traceback
 from datetime import datetime
@@ -82,12 +88,29 @@ def main():
     # 5f) 发酵豆粕 50% 营口 (mysteel chart API, 1y daily)
     results['fsb'] = run('update_fsb_mysteel.py', ['update_fsb_mysteel.py'], timeout=180)
 
-    # 6) FX rates (shibor 历史数据): 汇率 sheet 25 pairs + USD col (汇率/USD) of all sheets
-    #    (runs AFTER the updaters above so new rows get their K column healed)
+    # ---- raw sheet (1pnDkB...): 50 data tabs, one batch write each ----------
+    # 6) 100ppi 26 tabs (playwright; strict trader filter — a tab whose 备注
+    #    trader has no row on the page is skipped, never mixed with another)
+    results['raw_100ppi'] = run('update_raw_100ppi.py', ['update_raw_100ppi.py'], timeout=900)
+
+    # 7) echemi 15 tabs (headless Chrome CDP 9335 + chart score)
+    results['raw_echemi'] = run('update_raw_echemi.py', ['update_raw_echemi.py'], timeout=600)
+
+    # 8) sci99 prices.sci99 detail 6 tabs (header-driven, spec/market filter)
+    results['raw_sci99'] = run('update_raw_sci99.py', ['update_raw_sci99.py'], timeout=600)
+
+    # 9) vip.sci99 weekly PDF 2 tabs (磷酸一铵/二铵; skips when no new report)
+    results['raw_sci99_pdf'] = run('update_raw_sci99_pdf.py', ['update_raw_sci99_pdf.py'], timeout=300)
+
+    # 10) chinabgao 三甲胺 (山东, picks the row nearest the sheet's latest price)
+    results['raw_cnbg'] = run('update_raw_cnbg.py', ['update_raw_cnbg.py'], timeout=180)
+
+    # 11) FX rates (shibor 历史数据): 汇率 sheet 25 pairs + USD col (汇率/USD)
+    #     of BOTH sheets — runs AFTER every updater so new rows get healed
     results['fx_sheet'] = run('update_fx_sheet.py', ['update_fx_sheet.py'], timeout=120)
     results['fx_usd_cols'] = run('update_fx_rate.py', ['update_fx_rate.py'], timeout=600)
 
-    # 7) Verify (best-effort; may 429 — needs backoff headroom)
+    # 12) Verify (best-effort; batched reads — may 429 — needs backoff headroom)
     results['verify'] = run('verify_all_status.py', ['verify_all_status.py'], timeout=600)
 
     ok = sum(1 for v in results.values() if v)
