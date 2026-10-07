@@ -179,6 +179,8 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
         self._ui_q = queue.Queue()
         self._status_rows = []
         self._status_gids = {}
+        self._status_sid = {}
+        self._raw_tabs_cache = []
         self._data_rows = []
         self._history_rows = []
         self._health_rows = []
@@ -310,6 +312,7 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
             'sci99_username': '',
             'sci99_password': '',
             'spreadsheet_id': '1kuN8rT9shOellupamis9iyb6CpZFaWpao4VLdzZnQQU',
+            'raw_spreadsheet_id': '1pnDkBjLjfXgNE-Qv7rU7risEfcM3y4f4nd-OTN9XEu0',
             'service_account_json': r'C:\Users\DELL\.openclaw\workspace\secrets\service_account.json',
             'task_name': 'sci99-sheets-daily',
             'schedule': {'enabled': True, 'hour': 18, 'minute': 30,
@@ -408,8 +411,10 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
         if title:
             hr = tk.Frame(body, bg=C['surface'])
             hr.pack(fill='x', padx=pad, pady=(pad, 6))
-            tk.Label(hr, text=title, bg=C['surface'], fg=C['text'],
-                     font=FONT_H2).pack(side='left')
+            lbl_t = tk.Label(hr, text=title, bg=C['surface'], fg=C['text'],
+                             font=FONT_H2)
+            lbl_t.pack(side='left')
+            outer._title = lbl_t
             outer._hdr = hr
         outer._body = body
         return outer
@@ -506,7 +511,7 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
         self.lbl_status.pack(side='left', fill='x', expand=True)
         btn_ref = self.btn(ft, '🔄  Làm mới tất cả', self.refresh_all, kind='ghost')
         btn_ref.pack(side='right')
-        ToolTip(btn_ref, f'Tải lại trạng thái schedule + {len(self.sheets)} sheet + logs (F5)')
+        ToolTip(btn_ref, f'Tải lại trạng thái schedule + 2 spreadsheet + logs (F5)')
         tk.Label(ft, text='F5 làm mới · F6 chạy sync · Esc dừng', bg=C['bg'],
                  fg=C['muted'], font=('Segoe UI', 8)).pack(side='right', padx=12)
 
@@ -536,8 +541,8 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
         stats.pack(fill='x', pady=4)
         self.card_vars = {}
         for i, (key, title, sub) in enumerate([
-            ('sheets',     '📄  Tổng sheet',          'đang theo dõi'),
-            ('latest924',  '🕐  Latest = hôm nay',     f'trong {len(self.sheets)} sheet'),
+            ('sheets',     '📄  Tổng spreadsheet',    '33 + 51 tab dữ liệu'),
+            ('latest924',  '🕐  Latest = hôm nay',     'trong 2 spreadsheet'),
             ('rows',       '📊  Tổng dòng dữ liệu',   'tất cả sheet'),
             ('last_run',   '💾  Lần chạy gần nhất',    'từ logs/'),
             ('cookies',    '🍪  Cookie sci99',         'session hiện tại'),
@@ -554,7 +559,8 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
             self.card_vars[key] = v
 
         # --- status table ---
-        c3 = self.card(f, f'📋  Trạng thái {len(self.sheets)} sheet')
+        c3 = self.card(f, '📋  Trạng thái 2 spreadsheet')
+        self.card_status = c3
         c3.pack(fill='both', expand=True, pady=(8, 6))
         body = c3._body
         hdr = tk.Frame(body, bg=C['surface'])
@@ -577,7 +583,7 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
 
         cols = ('sheet', 'latest', 'rows', 'blocks', 'note')
         self.tree_status = ttk.Treeview(body, columns=cols, show='headings', height=6)
-        for c, w, t in [('sheet', 220, 'Sheet'), ('latest', 110, 'Latest'),
+        for c, w, t in [('sheet', 240, 'Tab (sheet)'), ('latest', 110, 'Latest'),
                         ('rows', 70, 'Rows'), ('blocks', 70, 'Blocks'),
                         ('note', 300, 'Note')]:
             self.tree_status.heading(c, text=t)
@@ -748,14 +754,15 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
                 self._health_busy = False
             self._post(ui)
         except Exception as e:
+            err = str(e)          # capture: 'except as e' unbinds e before the ui callback runs
             def ui_err():
                 self._health_busy = False
-                self.lbl_health_ts.config(text=f'lỗi: {str(e)[:90]}', fg=C['err'])
+                self.lbl_health_ts.config(text=f'lỗi: {err[:90]}', fg=C['err'])
                 if not self._health_rows:
                     for i in self.tree_health.get_children():
                         self.tree_health.delete(i)
                     self.tree_health.insert('', 'end',
-                                            values=('—', str(e)[:60], '', '', '', ''))
+                                            values=('—', err[:60], '', '', '', ''))
             self._post(ui_err)
 
     @staticmethod
@@ -865,7 +872,7 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
             tree.insert('', 'end', values=[str(x) for x in row[:5]])
             shown += 1
         if hasattr(self, 'lbl_status_count'):
-            self.lbl_status_count.config(text=f'{shown}/{len(self._status_rows)} sheet')
+            self.lbl_status_count.config(text=f'{shown}/{len(self._status_rows)} tab')
         if not self._status_rows:
             tree.insert('', 'end', values=('—', 'chưa tải', '', '', ''))
 
@@ -876,7 +883,7 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
         name = str(self.tree_status.item(sel[0], 'values')[0])
         if name in ('ERROR', '—'):
             return
-        sid = self.settings.get('spreadsheet_id', '')
+        sid = self._status_sid.get(name) or self.settings.get('spreadsheet_id', '')
         gid = self._status_gids.get(name)
         url = f'https://docs.google.com/spreadsheets/d/{sid}'
         if gid is not None:
@@ -982,7 +989,7 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
         return base
 
     def refresh_sheet_status(self):
-        self.card_vars['sheets'].config(text=str(len(self.sheets)))
+        self.card_vars['sheets'].config(text='2')
         self.card_vars['rows'].config(text='…')
         ck = os.path.join(HERE, 'sci99_cookies.json')
         if os.path.exists(ck):
@@ -1008,51 +1015,65 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
             creds = Credentials.from_service_account_file(
                 self.settings['service_account_json'],
                 scopes=['https://www.googleapis.com/auth/spreadsheets'])
-            sh = gspread.authorize(creds).open_by_key(self.settings['spreadsheet_id'])
-            try:
-                for ws in sh.worksheets():
-                    self._status_gids[ws.title] = ws.id
-            except Exception:
-                pass
-            # batched: 1 worksheets() + ~2 values_batch_get thay vì 33 get_all_values
-            self._post(self._status_progress, '● Đang đọc batch 33 sheet…', C['info'])
-            tabs = vas.collect_sheet(sh, vas.OLD_SHEETS, extra_src=False)
-            now = datetime.now()
-            today = now.date()
+            client = gspread.authorize(creds)
+            sid_old = self.settings.get('spreadsheet_id') or vas.OLD_SID
+            sid_raw = self.settings.get('raw_spreadsheet_id') or vas.RAW_SID
+            # batched: 1 worksheets() + ~2 values_batch_get per spreadsheet
+            self._post(self._status_progress, '● Đang đọc batch 2 spreadsheet…', C['info'])
+            today = datetime.now().date()
             rows_out, n_today, total_rows = [], 0, 0
-            for t in tabs:
-                total_rows += t['rows']
-                if t['status'] == 'missing':
-                    rows_out.append((t['name'], 'ERR', '', '', 'tab không tồn tại'))
-                    continue
-                latest = t['latest']
-                if latest is None:
-                    rows_out.append((t['name'], 'NO DATE', str(t['rows']), '0', ''))
-                    continue
-                is_today = latest.date() == today
-                n_today += 1 if is_today else 0
-                if is_today:
-                    note = '✅ hôm nay'
-                elif latest.year >= 2026:
-                    note = '📅 ngày khác'
-                else:
-                    note = '⚠ cũ'
-                rows_out.append((t['name'],
-                                 f'{latest.month}/{latest.day}/{latest.year}',
-                                 str(t['rows']), str(t['date_cols']), note))
+            for tag, sid, titles in (('CŨ', sid_old, vas.OLD_SHEETS),
+                                     ('MỚI', sid_raw, None)):
+                sh = client.open_by_key(sid)
+                try:
+                    for ws in sh.worksheets():
+                        label = f'[{tag}] {ws.title}'
+                        self._status_gids[label] = ws.id
+                        self._status_sid[label] = sid
+                except Exception:
+                    pass
+                tabs = vas.collect_sheet(sh, titles, extra_src=(titles is None))
+                for t in tabs:
+                    label = f'[{tag}] {t["name"]}'
+                    total_rows += t['rows']
+                    if t['status'] == 'missing':
+                        rows_out.append((label, 'ERR', '', '', 'tab không tồn tại'))
+                        continue
+                    latest = t['latest']
+                    if latest is None:
+                        rows_out.append((label, 'NO DATE', str(t['rows']), '0', ''))
+                        continue
+                    is_today = latest.date() == today
+                    n_today += 1 if is_today else 0
+                    if is_today:
+                        note = '✅ hôm nay'
+                    elif latest.year >= 2026:
+                        note = '📅 ngày khác'
+                    else:
+                        note = '⚠ cũ'
+                    if t.get('src') is False:
+                        note = '⚠ A1 không có URL'
+                    rows_out.append((label,
+                                     f'{latest.month}/{latest.day}/{latest.year}',
+                                     str(t['rows']), str(t['date_cols']), note))
 
             def ui():
                 self._status_rows = rows_out
                 self._render_status()
+                if hasattr(self, 'card_status'):
+                    self.card_status._title.config(
+                        text=f'📋  Trạng thái 2 spreadsheet · {len(rows_out)} tab')
                 self.card_vars['latest924'].config(text=f'{n_today}/{len(rows_out)}')
                 self.card_vars['rows'].config(text=f'{total_rows:,}')
-                self.lbl_status.config(text=f'● Đã tải {len(rows_out)} sheet status', fg=C['ok'])
+                self.lbl_status.config(text=f'● Đã tải {len(rows_out)} tab status (33 + 51)',
+                                       fg=C['ok'])
             self._post(ui)
         except Exception as e:
+            err = str(e)
             def ui_err():
-                self._status_rows = [('ERROR', '', '', '', str(e)[:120])]
+                self._status_rows = [('ERROR', '', '', '', err[:120])]
                 self._render_status()
-                self.lbl_status.config(text=f'● Lỗi: {e}', fg=C['err'])
+                self.lbl_status.config(text=f'● Lỗi: {err}', fg=C['err'])
             self._post(ui_err)
 
     def refresh_all(self):
@@ -1071,7 +1092,18 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
         top = tk.Frame(f, bg=C['bg'])
         top.pack(fill='x', pady=(12, 8))
 
-        tk.Label(top, text='Sheet:', bg=C['bg'], fg=C['muted'],
+        tk.Label(top, text='Spreadsheet:', bg=C['bg'], fg=C['muted'],
+                 font=FONT_S).pack(side='left')
+        self.cmb_ds = ttk.Combobox(
+            top, values=['SHEET CŨ', 'SHEET MỚI'], state='readonly',
+            width=13, font=FONT)
+        self.cmb_ds.set('SHEET CŨ')
+        self.cmb_ds.pack(side='left', padx=(6, 12))
+        self.cmb_ds.bind('<<ComboboxSelected>>', self._on_data_sheet)
+        ToolTip(self.cmb_ds, 'CŨ = 1kuN8… (33 tab) · MỚI = 1pnDkB… (51 tab, '
+                             'gồm 2 tab 三甲胺_cnbg)')
+
+        tk.Label(top, text='Tab:', bg=C['bg'], fg=C['muted'],
                  font=FONT_S).pack(side='left')
         self.cmb_sheet = ttk.Combobox(top, values=self.sheets, state='readonly',
                                       width=26, font=FONT)
@@ -1109,8 +1141,56 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
         body.columnconfigure(0, weight=1)
         self._raw_vals = []
 
+    def _data_sid(self):
+        import verify_all_status as vas
+        if self.cmb_ds.get() == 'SHEET MỚI':
+            return self.settings.get('raw_spreadsheet_id') or vas.RAW_SID
+        return self.settings.get('spreadsheet_id') or vas.OLD_SID
+
+    def _on_data_sheet(self, event=None):
+        """Chuyển spreadsheet → nạp lại danh sách tab (tab mới lấy 1 lần, cache)."""
+        if self.cmb_ds.get() == 'SHEET CŨ':
+            self.cmb_sheet.configure(values=self.sheets)
+            if self.sheets:
+                self.cmb_sheet.set(self.sheets[0])
+            self.lbl_data_info.config(text='', fg=C['muted'])
+            return
+        if self._raw_tabs_cache:
+            self.cmb_sheet.configure(values=self._raw_tabs_cache)
+            self.cmb_sheet.set(self._raw_tabs_cache[0])
+            self.lbl_data_info.config(text=f'{len(self._raw_tabs_cache)} tab sheet mới',
+                                      fg=C['ok'])
+            return
+        self.lbl_data_info.config(text='⏳ Đang lấy danh sách tab sheet mới…', fg=C['info'])
+        # sid phải đọc ở main thread — widget gọi từ thread khác sẽ lỗi
+        threading.Thread(target=self._list_tabs_worker, args=(self._data_sid(),),
+                         daemon=True).start()
+
+    def _list_tabs_worker(self, sid):
+        try:
+            import gspread
+            from google.oauth2.service_account import Credentials
+            creds = Credentials.from_service_account_file(
+                self.settings['service_account_json'],
+                scopes=['https://www.googleapis.com/auth/spreadsheets'])
+            sh = gspread.authorize(creds).open_by_key(sid)
+            tabs = [w.title for w in sh.worksheets()]
+            self._raw_tabs_cache = tabs
+
+            def ui():
+                self.cmb_sheet.configure(values=tabs)
+                if tabs:
+                    self.cmb_sheet.set(tabs[0])
+                self.lbl_data_info.config(text=f'{len(tabs)} tab sheet mới', fg=C['ok'])
+            self._post(ui)
+        except Exception as e:
+            err = str(e)
+            def ui_err():
+                self.lbl_data_info.config(text=f'ERROR: {err}', fg=C['err'])
+            self._post(ui_err)
+
     def open_sheet_url(self):
-        sid = self.settings.get('spreadsheet_id', '')
+        sid = self._data_sid()
         import webbrowser
         webbrowser.open(f'https://docs.google.com/spreadsheets/d/{sid}')
 
@@ -1119,29 +1199,33 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
         if not name:
             return
         self.lbl_data_info.config(text='⏳ Đang tải…', fg=C['info'])
-        threading.Thread(target=self._load_data_worker, args=(name,), daemon=True).start()
+        sid = self._data_sid()      # main thread only
+        threading.Thread(target=self._load_data_worker, args=(name, sid),
+                         daemon=True).start()
 
-    def _load_data_worker(self, name):
+    def _load_data_worker(self, name, sid):
         try:
             import gspread
             from google.oauth2.service_account import Credentials
             creds = Credentials.from_service_account_file(
                 self.settings['service_account_json'],
                 scopes=['https://www.googleapis.com/auth/spreadsheets'])
-            sh = gspread.authorize(creds).open_by_key(self.settings['spreadsheet_id'])
+            sh = gspread.authorize(creds).open_by_key(sid)
             ws = sh.worksheet(name)
             vals = ws.get_all_values()
             def ui():
                 self._raw_vals = vals
                 n_cols = max((len(r) for r in vals), default=0)
-                self._data_base_info = f'{name}: {len(vals)} rows × {n_cols} cols'
+                self._data_base_info = (f'{self.cmb_ds.get()} · {name}: '
+                                        f'{len(vals)} rows × {n_cols} cols')
                 if self.ent_find.get():
                     self.ent_find.delete(0, 'end')
                 self._render_grid(vals)
             self._post(ui)
         except Exception as e:
+            err = str(e)
             def ui():
-                self._data_base_info = f'ERROR: {e}'
+                self._data_base_info = f'ERROR: {err}'
                 self.lbl_data_info.config(text=self._data_base_info, fg=C['err'])
             self._post(ui)
 
@@ -1245,7 +1329,7 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
         ToolTip(self.btn_stop, 'Dừng toàn bộ tiến trình sync (kể cả step đang chạy) — phím Esc')
         ToolTip(self.btn_task_run, 'Chạy qua Windows Task Scheduler (chạy nền, không hiện console)')
         ToolTip(self.btn_verify, 'Chạy riêng verify_all_status.py — kiểm tra '
-                                 f'{len(self.sheets)} tab mà không chạy pipeline')
+                                 f'{len(self.sheets)} + 51 tab mà không chạy pipeline')
 
         right = tk.Frame(top, bg=C['bg'])
         right.pack(side='right')
@@ -1503,7 +1587,8 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
             self.lbl_status.config(text=f'● {err}', fg=C['err'])
         elif rc == 0 and failn == 0:
             state, fg = f'✅ Hoàn thành — {len(STEPS)}/{len(STEPS)} bước OK', C['ok']
-            self.lbl_status.config(text=f'● Sync OK — {len(self.sheets)} sheet đã kiểm tra', fg=C['ok'])
+            self.lbl_status.config(text=f'● Sync OK — 2 spreadsheet · {len(self.sheets)} + 51 tab',
+                                   fg=C['ok'])
         elif rc == 0:
             state, fg = f'⚠ Core OK nhưng {failn} bước FAIL — {okn}/{len(STEPS)}', C['warn']
             self.lbl_status.config(text=f'● Xong với {failn} bước lỗi', fg=C['warn'])
@@ -1548,7 +1633,7 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
         self.lbl_run_state.config(text='▶ verify_all_status.py …', fg=C['accent'])
         self.lbl_status.config(text='● Đang verify…', fg=C['info'])
         self.txt_run.delete('1.0', 'end')
-        self._log_run(f'$ python -X utf8 verify_all_status.py  ({len(self.sheets)} tab)')
+        self._log_run(f'$ python -X utf8 verify_all_status.py  ({len(self.sheets)} + 51 tab)')
         threading.Thread(target=self._run_verify_worker, daemon=True).start()
 
     def _run_verify_worker(self):
@@ -1576,8 +1661,8 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
             state, fg = '⏹ Đã dừng verify', C['warn']
             self.lbl_status.config(text='● Verify đã dừng', fg=C['warn'])
         elif rc == 0:
-            state, fg = f'✅ Verify OK — {len(self.sheets)} tab', C['ok']
-            self.lbl_status.config(text=f'● Verify OK — {len(self.sheets)} tab', fg=C['ok'])
+            state, fg = f'✅ Verify OK — {len(self.sheets)} + 51 tab', C['ok']
+            self.lbl_status.config(text=f'● Verify OK — {len(self.sheets)} + 51 tab', fg=C['ok'])
         else:
             state, fg = f'⚠ Verify rc={rc} — xem console', C['warn']
             self.lbl_status.config(text=f'● Verify rc={rc}', fg=C['warn'])
@@ -1614,31 +1699,38 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
         self.ent_pass.insert(0, self.settings.get('sci99_password', ''))
         self.btn(pwrow, '👁 Hiện', self.toggle_pass, kind='ghost').pack(side='left', padx=(6, 0))
 
-        lab(4, 0, 'Spreadsheet ID', columnspan=3)
+        lab(4, 0, 'Spreadsheet ID — sheet CŨ (33 tab)', columnspan=3)
         self.ent_sid = self.entry(inn, width=52)
         self.ent_sid.grid(row=5, column=0, columnspan=3, sticky='ew', pady=4)
         self.ent_sid.insert(0, self.settings.get('spreadsheet_id', ''))
 
-        lab(6, 0, 'Service account JSON', columnspan=3)
+        lab(6, 0, 'Spreadsheet ID — sheet MỚI (51 tab)', columnspan=3)
+        self.ent_rsid = self.entry(inn, width=52)
+        self.ent_rsid.grid(row=7, column=0, columnspan=3, sticky='ew', pady=4)
+        self.ent_rsid.insert(
+            0, self.settings.get('raw_spreadsheet_id',
+                                 '1pnDkBjLjfXgNE-Qv7rU7risEfcM3y4f4nd-OTN9XEu0'))
+
+        lab(8, 0, 'Service account JSON', columnspan=3)
         crrow = tk.Frame(inn, bg=C['surface'])
-        crrow.grid(row=7, column=0, columnspan=3, sticky='ew', pady=4)
+        crrow.grid(row=9, column=0, columnspan=3, sticky='ew', pady=4)
         self.ent_creds = self.entry(crrow, width=40)
         self.ent_creds.pack(side='left', fill='x', expand=True)
         self.ent_creds.insert(0, self.settings.get('service_account_json', ''))
         self.btn(crrow, 'Chọn file…', self.pick_creds, kind='ghost').pack(side='left', padx=(6, 0))
 
-        lab(8, 0, 'Task name (Windows)', columnspan=3)
+        lab(10, 0, 'Task name (Windows)', columnspan=3)
         self.ent_task = self.entry(inn, width=36)
-        self.ent_task.grid(row=9, column=0, columnspan=3, sticky='ew', pady=4)
+        self.ent_task.grid(row=11, column=0, columnspan=3, sticky='ew', pady=4)
         self.ent_task.insert(0, self.settings.get('task_name', 'sci99-sheets-daily'))
 
         self.btn(inn, '💾  LƯU CÀI ĐẶT', self.save_settings_ui, kind='primary'
-                 ).grid(row=10, column=0, columnspan=3, sticky='w', pady=(16, 4))
+                 ).grid(row=12, column=0, columnspan=3, sticky='w', pady=(16, 4))
         inn.columnconfigure(0, weight=1)
 
         self.lbl_set_status = tk.Label(inn, text='', bg=C['surface'], fg=C['muted'],
                                        font=FONT_S, justify='left', wraplength=420)
-        self.lbl_set_status.grid(row=11, column=0, columnspan=3, sticky='w', pady=(8, 14))
+        self.lbl_set_status.grid(row=13, column=0, columnspan=3, sticky='w', pady=(8, 14))
 
         # RIGHT: schedule
         cR = self.card(f, '⏰  Lịch chạy tự động')
@@ -1717,6 +1809,7 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
         self.settings['sci99_username'] = self.ent_user.get().strip()
         self.settings['sci99_password'] = self.ent_pass.get()
         self.settings['spreadsheet_id'] = self.ent_sid.get().strip()
+        self.settings['raw_spreadsheet_id'] = self.ent_rsid.get().strip()
         self.settings['service_account_json'] = self.ent_creds.get().strip()
         self.settings['task_name'] = self.ent_task.get().strip() or 'sci99-sheets-daily'
         self.settings.setdefault('schedule', {})

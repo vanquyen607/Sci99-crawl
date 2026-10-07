@@ -169,11 +169,11 @@ python -X utf8 scripts\verify_all_status.py
 
 | Tab | Nội dung |
 |-----|----------|
-| 🏠 Dashboard | Lịch chạy (Task Scheduler), KPI, trạng thái 33 tab (batched ~5s), lịch sử chạy gần đây |
-| 🩺 Sức khỏe | **Quản lý cả 2 sheet**: card `33/33` + `50/50`, bảng 83 tab (mới nhất / dòng / URL A1 / trạng thái), lọc + "chỉ hiện lỗi", double-click mở sheet, **tự đọc batch mỗi 5 phút** |
-| 📁 Dữ liệu | Xem/Export CSV 1 tab bất kỳ |
+| 🏠 Dashboard | Lịch chạy (Task Scheduler), KPI, trạng thái **2 spreadsheet · 84 tab** (33 + 51, batched ~5s, đánh dấu `[CŨ]`/`[MỚI]`, double-click mở đúng sheet + gid), lịch sử chạy gần đây |
+| 🩺 Sức khỏe | **Quản lý cả 2 sheet**: card `33/33` + `51/51`, bảng 84 tab (mới nhất / dòng / URL A1 / trạng thái), lọc + "chỉ hiện lỗi", double-click mở sheet, **tự đọc batch mỗi 5 phút** |
+| 📁 Dữ liệu | Chuyển **SHEET CŨ (33 tab) / SHEET MỚI (54 tab gồm 3 index)** → xem + Export CSV tab bất kỳ |
 | ▶ Chạy sync | Tiến trình 18 bước realtime + console (F6 chạy, Esc dừng) |
-| ⚙ Cài đặt | Login sci99, spreadsheet id, Task Scheduler ON/OFF + giờ |
+| ⚙ Cài đặt | Login sci99, **2 spreadsheet id (cũ + mới)**, Task Scheduler ON/OFF + giờ |
 | 📜 Logs | Đọc `logs/daily_*.log` |
 
 - Phím tắt: `F5` làm mới · `F6` chạy sync · `Esc` dừng

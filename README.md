@@ -1,6 +1,6 @@
 # Sci99-crawl
 
-Crawler sci99.com + echemi/mysteel/100ppi → Google Sheets (2 spreadsheet: 33 tab cũ + 51 tab mới), tự đồng bộ hằng ngày qua Windows Task Scheduler, kèm app GUI điều khiển (theme ttkbootstrap, tab 🩺 Sức khỏe theo dõi cả 2 sheet).
+Crawler sci99.com + echemi/mysteel/100ppi → Google Sheets (2 spreadsheet: 33 tab cũ + 51 tab mới), tự đồng bộ hằng ngày qua Windows Task Scheduler, kèm app GUI điều khiển (theme ttkbootstrap — Dashboard 🏠 + Sức khỏe 🩺 theo dõi cả 2 sheet).
 
 ## Chạy
 
@@ -11,7 +11,8 @@ Crawler sci99.com + echemi/mysteel/100ppi → Google Sheets (2 spreadsheet: 33 t
 | Lịch tự động | Task Scheduler `sci99-sheets-daily` — sửa trong tab ⚙ Cài đặt của GUI |
 
 - GUI phím tắt: `F5` làm mới · `F6` chạy sync · `Esc` dừng
-- Tab 🩺 Sức khỏe: 33 + 51 tab, tự đọc batch mỗi 5 phút (cần `pip install ttkbootstrap`)
+- Tab 🏠 Dashboard: trạng thái 2 sheet · 84 tab (batch, double-click mở đúng sheet); tab 🩺 Sức khỏe: 33 + 51 tab, tự đọc batch mỗi 5 phút (cần `pip install ttkbootstrap`)
+- Tab 📁 Dữ liệu: chọn SHEET CŨ / SHEET MỚI để xem + export CSV tab bất kỳ
 - Log: `scripts/logs/daily_*.log`
 
 ## Cấu trúc
