@@ -153,8 +153,14 @@ class Tab:
         if self.session_id:
             msg['sessionId'] = self.session_id
         self.ws.send(json.dumps(msg))
+        deadline = time.time() + 60
         while True:
-            raw = self.ws.recv(timeout=60)
+            if time.time() > deadline:
+                raise TimeoutError(f'{method}: no response in 60s')
+            try:
+                raw = self.ws.recv(timeout=5)
+            except TimeoutError:
+                continue
             data = json.loads(raw)
             if data.get('id') == mid:
                 if 'error' in data:
@@ -227,8 +233,14 @@ class Browser:
         self._id += 1
         mid = self._id
         self.ws.send(json.dumps({'id': mid, 'method': method, 'params': params}))
+        deadline = time.time() + 60
         while True:
-            data = json.loads(self.ws.recv(timeout=60))
+            if time.time() > deadline:
+                raise TimeoutError(f'{method}: no response in 60s')
+            try:
+                data = json.loads(self.ws.recv(timeout=5))
+            except TimeoutError:
+                continue
             if data.get('id') == mid:
                 if 'error' in data:
                     raise RuntimeError(f'{method}: {data["error"]}')
@@ -469,7 +481,8 @@ def human_drag(page):
                 if box:
                     try:
                         pb = loc.locator('..').bounding_box()
-                        if pb and pb['width'] > box['width'] + 30:
+                        # the track: parent wider than the handle but not the whole widget
+                        if pb and box['width'] + 30 < pb['width'] < box['width'] + 500:
                             track = pb
                     except Exception:
                         pass
@@ -481,17 +494,23 @@ def human_drag(page):
     cx = box['x'] + box['width'] / 2
     cy = box['y'] + box['height'] / 2
     if track:
-        dist = track['x'] + track['width'] - box['width'] / 2 - 3 - cx
-        dist = max(60, min(340, dist))
+        # slide to the right edge of the track (leave 4px padding)
+        dist = (track['x'] + track['width'] - box['width'] / 2 - 4) - cx
+        dist = max(60, min(500, dist))
     else:
-        dist = random.randint(240, 300)
+        dist = random.randint(260, 340)
     dist += random.uniform(-2, 2)
+    # wander onto the slider like a human cursor (anti-bot checks approach path)
+    for wx, wy in ((cx - 160, cy + 90), (cx - 60, cy + 30), (cx - 14, cy + 6)):
+        page.mouse.move(wx, wy, steps=8)
+        time.sleep(random.uniform(0.09, 0.2))
     page.mouse.move(cx + random.uniform(-4, 0), cy + random.uniform(-3, 3), steps=4)
-    time.sleep(random.uniform(0.08, 0.18))
+    time.sleep(random.uniform(0.12, 0.25))
     page.mouse.down()
-    time.sleep(random.uniform(0.06, 0.14))
-    steps = random.randint(40, 65)
+    time.sleep(random.uniform(0.07, 0.16))
+    steps = random.randint(45, 70)
     x = 0.0
+    slip_at = sorted(random.sample(range(10, steps - 5), k=2)) if steps > 20 else []
     for i in range(steps):
         t = (i + 1) / steps
         if t < 0.3:
@@ -501,6 +520,8 @@ def human_drag(page):
         else:
             eased = 0.90 + (1 - (t - 0.85) / 0.15) ** 2 * 0.10
         x = dist * eased
+        if i in slip_at:
+            x -= random.uniform(3, 7)  # natural micro-slip backwards
         jy = max(-2.0, min(2.0, random.gauss(0, 0.6)))
         page.mouse.move(cx + x, cy + jy, steps=1)
         if t > 0.9:

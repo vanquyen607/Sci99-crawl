@@ -17,7 +17,9 @@ Quota: one values_batch_get for all 15 tabs + one values_batch_update.
 """
 import io
 import os
+import random
 import sys
+import time
 from datetime import datetime
 
 if __name__ == '__main__' and __package__ is None:
@@ -244,6 +246,7 @@ def main():
                 continue
             data = fetch(browser, urls[t], 'first' if first else t)
             first = False
+            time.sleep(random.uniform(4, 8))  # pace pages: keeps Aliyun risk low
             if not data or not data.get('charts'):
                 print(f'  {t}: no charts')
                 continue
