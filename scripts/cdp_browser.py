@@ -335,6 +335,8 @@ def ensure_scratch_chrome(log=print):
          '--remote-debugging-port=9222',
          '--remote-allow-origins=*',
          '--no-first-run', '--no-default-browser-check',
+         '--disable-optimization-guide-model-download',
+         '--disable-features=OptimizationGuideModelDownloading,SODAOnDeviceRecognition',
          'https://www.echemi.com/'],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
@@ -379,7 +381,9 @@ def launch_profile_cdp(profile, port, url=None, log=print):
         return None
     args = [CHROME_EXE, f'--user-data-dir={profile}',
             f'--remote-debugging-port={port}', '--remote-allow-origins=*',
-            '--no-first-run', '--no-default-browser-check']
+            '--no-first-run', '--no-default-browser-check',
+            '--disable-optimization-guide-model-download',
+            '--disable-features=OptimizationGuideModelDownloading,SODAOnDeviceRecognition']
     if url:
         args.append(url)
     try:
