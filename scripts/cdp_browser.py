@@ -1,24 +1,54 @@
 # -*- coding: utf-8 -*-
-"""Minimal CDP driver for the user's real Chrome.
+"""Echemi browser layer: CDP driver, my-chrome mode, profile fallback, Aliyun slider.
 
 Playwright's connect_over_cdp dies on Chrome 136+ with
 "Browser.setDownloadBehavior: Browser context management is not supported",
-so we talk raw DevTools Protocol over websocket. Only the tiny subset the
-echemi scripts need is implemented: new tab, goto, evaluate JS, locator
-(count/is_visible/bounding_box/click), mouse drag, cookies, close.
+so the driver talks raw DevTools Protocol over websocket (websockets lazily
+imported). Only the subset the echemi scripts need is implemented:
+new tab, goto, evaluate JS, locator, mouse drag, cookies, close.
+
+Shared by update_raw_echemi.py / update_choline_echemi.py / daily_sync.py:
+  - my-chrome mode: attach to the user's real Chrome on MY_CDP (port 9222,
+    started by scripts/my_chrome.bat or ensure_scratch_chrome) - session is
+    already verified => no Aliyun slider.
+  - profile fallback: clean Chrome on scripts/.echemi_profile + its own CDP
+    port, cookies injected from echemi_cookies.json.
+  - Aliyun slider helpers (is_blocked/human_drag/unblock) work on both
+    playwright pages and the raw cdp Tab.
 
 Usage:
-    from cdp_browser import connect
-    browser = connect('http://127.0.0.1:9222')
-    page = browser.new_tab()
-    page.goto('https://www.echemi.com/...')
+    from cdp_browser import connect, launch_echemi, unblock
 """
+import io
 import json
+import os
+import random
+import shutil
+import subprocess
+import sys
 import time
 import urllib.request
+from datetime import datetime
 
-from websockets.sync.client import connect as _ws_connect
+HERE = os.path.dirname(os.path.abspath(__file__))
+ECHEMI_COOKIES = os.path.join(HERE, 'echemi_cookies.json')
+SCRATCH_PROFILE = os.path.join(HERE, '.mychrome_profile')
+MY_CDP = os.environ.get('SCI99_MY_CDP', 'http://127.0.0.1:9222')
 
+CHROME_EXE = next((c for c in (
+    r'C:\Program Files\Google\Chrome\Application\chrome.exe',
+    r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe',
+    os.path.join(os.environ.get('LOCALAPPDATA', ''), r'Google\Chrome\Application\chrome.exe'),
+) if os.path.exists(c)), None)
+
+REAL_PROFILES = [
+    os.path.join(os.environ.get('LOCALAPPDATA', ''), r'Google\Chrome\User Data'),
+]
+
+
+# --------------------------------------------------------------------------
+# raw CDP driver (playwright-free)
+# --------------------------------------------------------------------------
 
 class _Mouse:
     def __init__(self, tab):
@@ -187,7 +217,8 @@ class _Context:
 
 class Browser:
     def __init__(self, ws_url):
-        self.ws = _ws_connect(ws_url, max_size=64 * 1024 * 1024)
+        from websockets.sync.client import connect as ws_connect  # lazy: optional dep
+        self.ws = ws_connect(ws_url, max_size=64 * 1024 * 1024)
         self._id = 0
         self._utility = None
         self.contexts = [_Context(self)]
@@ -235,3 +266,340 @@ class Browser:
 def connect(cdp_url='http://127.0.0.1:9222'):
     ver = json.loads(urllib.request.urlopen(cdp_url + '/json/version', timeout=5).read())
     return Browser(ver['webSocketDebuggerUrl'])
+
+
+# --------------------------------------------------------------------------
+# my-chrome mode (user's real Chrome on port 9222, no slider)
+# --------------------------------------------------------------------------
+
+def my_chrome_requested(argv=None):
+    argv = sys.argv if argv is None else argv
+    return '--my-chrome' in argv or os.environ.get('SCI99_MY_CHROME') == '1'
+
+
+def cdp_up(cdp_url=MY_CDP, timeout=2):
+    try:
+        urllib.request.urlopen(cdp_url + '/json/version', timeout=timeout)
+        return True
+    except Exception:
+        return False
+
+
+def _bootstrap_scratch_profile(log=print):
+    """First run: copy Local State/Cookies/Preferences from the real Chrome
+    profile into .mychrome_profile so the session passes echemi's slider."""
+    if os.path.exists(os.path.join(SCRATCH_PROFILE, 'Local State')):
+        return True  # already bootstrapped, its cookies persist + refresh
+    real = next((p for p in REAL_PROFILES if os.path.exists(p)), None)
+    if not real:
+        return False
+    try:
+        os.makedirs(os.path.join(SCRATCH_PROFILE, 'Default', 'Network'), exist_ok=True)
+        shutil.copy2(os.path.join(real, 'Local State'), os.path.join(SCRATCH_PROFILE, 'Local State'))
+        for rel in (r'Default\Network\Cookies', r'Default\Preferences'):
+            src = os.path.join(real, rel)
+            if os.path.exists(src):
+                shutil.copy2(src, os.path.join(SCRATCH_PROFILE, rel))
+        return True
+    except Exception as e:
+        log(f'my-chrome: profile bootstrap failed: {e}')
+        return False
+
+
+def ensure_scratch_chrome(log=print):
+    """Bootstrap + launch the scratch Chrome if needed (daily_sync hook).
+    True when the echemi steps should run with --my-chrome."""
+    if os.environ.get('SCI99_MY_CHROME') == '0':
+        return False
+    if cdp_up():
+        log(f'my-chrome: attach to scratch Chrome at {MY_CDP}')
+        return True
+    if not CHROME_EXE or not _bootstrap_scratch_profile(log):
+        log('my-chrome: no Chrome/profile found - echemi falls back to profile mode')
+        return False
+    subprocess.Popen(
+        [CHROME_EXE,
+         f'--user-data-dir={SCRATCH_PROFILE}',
+         '--remote-debugging-port=9222',
+         '--remote-allow-origins=*',
+         '--no-first-run', '--no-default-browser-check',
+         'https://www.echemi.com/'],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+    )
+    for _ in range(15):
+        time.sleep(1)
+        if cdp_up():
+            log(f'my-chrome: scratch Chrome ready at {MY_CDP}')
+            return True
+    log('my-chrome: scratch Chrome did not come up - echemi falls back to profile mode')
+    return False
+
+
+# --------------------------------------------------------------------------
+# profile-mode fallback (clean Chrome + saved cookies, own CDP port)
+# --------------------------------------------------------------------------
+
+def kill_profile_chrome(profile):
+    ps = ("Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" | "
+          f"Where-Object {{$_.CommandLine -like '*{profile}*'}} | "
+          "ForEach-Object {Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue}")
+    try:
+        subprocess.run(['powershell', '-NoProfile', '-Command', ps], timeout=20,
+                       capture_output=True)
+    except Exception:
+        pass
+
+
+def launch_profile_cdp(profile, port, url=None, log=print):
+    """Clean Chrome (no automation flags) on `profile`, CDP on `port`.
+    Returns the Popen or None."""
+    kill_profile_chrome(profile)  # stale instance from a crashed run
+    time.sleep(1)
+    os.makedirs(profile, exist_ok=True)
+    for lf in ('lockfile', 'SingletonLock', 'SingletonCookie'):
+        try:
+            os.remove(os.path.join(profile, lf))
+        except OSError:
+            pass
+    if not CHROME_EXE:
+        log('SKIP: chrome.exe not found')
+        return None
+    args = [CHROME_EXE, f'--user-data-dir={profile}',
+            f'--remote-debugging-port={port}', '--remote-allow-origins=*',
+            '--no-first-run', '--no-default-browser-check']
+    if url:
+        args.append(url)
+    try:
+        proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception as e:
+        log(f'SKIP cannot launch chrome: {e}')
+        return None
+    for _ in range(40):
+        if cdp_up(f'http://127.0.0.1:{port}'):
+            return proc
+        time.sleep(0.5)
+    log('SKIP chrome CDP port not ready')
+    try:
+        proc.kill()
+    except Exception:
+        pass
+    return None
+
+
+def launch_echemi(profile, port, want_my, url=None, log=print):
+    """Unified start for the echemi updaters.
+    Returns (my_ok, browser, proc, pw): proc/pw are set in profile mode only."""
+    if want_my:
+        if cdp_up():
+            try:
+                browser = connect(MY_CDP)
+                log(f'my-chrome: attached to {MY_CDP} (no slider)')
+                return True, browser, None, None
+            except Exception as e:
+                log(f'my-chrome: CDP attach failed ({str(e)[:70]}) - profile chrome')
+        else:
+            log(f'my-chrome: {MY_CDP} not open (run scripts\\my_chrome.bat) - profile chrome')
+    proc = launch_profile_cdp(profile, port, url=url, log=log)
+    if proc is None:
+        return False, None, None, None
+    from playwright.sync_api import sync_playwright
+    try:
+        pw = sync_playwright().start()
+        browser = pw.chromium.connect_over_cdp(f'http://127.0.0.1:{port}')
+        try:
+            browser.contexts[0].add_cookies(json.load(open(ECHEMI_COOKIES, encoding='utf-8')))
+        except Exception as e:
+            log('cookie inject err', e)
+        return False, browser, proc, pw
+    except Exception as e:
+        log(f'SKIP CDP connect failed: {e}')
+        try:
+            proc.kill()
+        except Exception:
+            pass
+        return False, None, None, None
+
+
+def shutdown_echemi(browser, pw, proc, profile=None, log=print):
+    """Best-effort teardown; also kills the profile Chrome when profile given."""
+    try:
+        if browser:
+            browser.close()
+    except Exception:
+        pass
+    try:
+        if pw:
+            pw.stop()
+    except Exception:
+        pass
+    try:
+        if proc:
+            proc.kill()
+    except Exception:
+        pass
+    if profile:
+        time.sleep(1)
+        kill_profile_chrome(profile)
+
+
+# --------------------------------------------------------------------------
+# Aliyun slider (works on playwright pages and the raw cdp Tab)
+# --------------------------------------------------------------------------
+
+def is_blocked(page):
+    try:
+        t = (page.title() or '').strip()
+        body = page.evaluate('() => (document.body.innerText || "").slice(0, 400)') or ''
+    except Exception:
+        return False, '', ''
+    bl = body.lower()
+    blocked = (('验证' in t) or ('slide' in bl) or ('滑动' in body) or ('verification' in bl))
+    return blocked, t, body
+
+
+def human_drag(page):
+    """Aliyun slider with human-like physics (works headless and headed)."""
+    box = track = None
+    for sel in ['#aliyunCaptcha-sliding-slider', '[id*="sliding-slider"]']:
+        try:
+            loc = page.locator(sel).first
+            if loc.count() and loc.is_visible(timeout=600):
+                box = loc.bounding_box()
+                if box:
+                    try:
+                        pb = loc.locator('..').bounding_box()
+                        if pb and pb['width'] > box['width'] + 30:
+                            track = pb
+                    except Exception:
+                        pass
+                break
+        except Exception:
+            pass
+    if not box:
+        return False
+    cx = box['x'] + box['width'] / 2
+    cy = box['y'] + box['height'] / 2
+    if track:
+        dist = track['x'] + track['width'] - box['width'] / 2 - 3 - cx
+        dist = max(60, min(340, dist))
+    else:
+        dist = random.randint(240, 300)
+    dist += random.uniform(-2, 2)
+    page.mouse.move(cx + random.uniform(-4, 0), cy + random.uniform(-3, 3), steps=4)
+    time.sleep(random.uniform(0.08, 0.18))
+    page.mouse.down()
+    time.sleep(random.uniform(0.06, 0.14))
+    steps = random.randint(40, 65)
+    x = 0.0
+    for i in range(steps):
+        t = (i + 1) / steps
+        if t < 0.3:
+            eased = (t / 0.3) ** 1.4 * 0.35
+        elif t < 0.85:
+            eased = 0.35 + (t - 0.3) / 0.55 * 0.55
+        else:
+            eased = 0.90 + (1 - (t - 0.85) / 0.15) ** 2 * 0.10
+        x = dist * eased
+        jy = max(-2.0, min(2.0, random.gauss(0, 0.6)))
+        page.mouse.move(cx + x, cy + jy, steps=1)
+        if t > 0.9:
+            time.sleep(random.uniform(0.04, 0.09))
+        elif t > 0.6:
+            time.sleep(random.uniform(0.015, 0.04))
+        else:
+            time.sleep(random.uniform(0.008, 0.025))
+    page.mouse.move(cx + x + random.uniform(1.5, 4), cy + random.uniform(-1, 1), steps=2)
+    time.sleep(random.uniform(0.06, 0.12))
+    page.mouse.move(cx + x - random.uniform(0.5, 2.5), cy, steps=2)
+    time.sleep(random.uniform(0.05, 0.1))
+    page.mouse.up()
+    time.sleep(random.uniform(0.9, 1.6))
+    return True
+
+
+def unblock(page, url, label='', manual_wait=0, log=print):
+    """Bring a challenged page back (up to 3 auto slides + optional manual wait).
+    True when the page is usable."""
+    pre = f'    {label}: ' if label else ''
+    for attempt in range(1, 4):
+        blocked, t, body = is_blocked(page)
+        if not blocked:
+            return True
+        log(f'{pre}verification (title={t!r}) - slider attempt {attempt}')
+        page.wait_for_timeout(2500)
+        if not human_drag(page):
+            log(f'{pre}slider widget not found')
+            page.goto(url, wait_until='domcontentloaded', timeout=45000)
+            page.wait_for_timeout(4000)
+            continue
+        page.wait_for_timeout(3500)
+        blocked, t, body = is_blocked(page)
+        if not blocked:
+            log(f'{pre}slider PASSED')
+            return True
+        try:
+            rf = page.locator('[class*=refresh], [id*=refresh]').first
+            if rf.count() and rf.is_visible(timeout=800):
+                rf.click()
+                page.wait_for_timeout(2500)
+        except Exception:
+            pass
+    if manual_wait:
+        log(f'{pre}slide MANUALLY in the Chrome window (waiting {manual_wait}s)')
+        for _ in range(manual_wait // 3):
+            page.wait_for_timeout(3000)
+            blocked, _, _ = is_blocked(page)
+            if not blocked:
+                log(f'{pre}manual slide PASSED')
+                return True
+    blocked, t, _ = is_blocked(page)
+    log(f'{pre}SKIP, still on verification ({t!r})')
+    return False
+
+
+def save_echemi_cookies(browser, log=print):
+    try:
+        cks = browser.contexts[0].cookies()
+        keep = [{k: c[k] for k in ('name', 'value', 'domain', 'path', 'expires',
+                                   'httpOnly', 'secure', 'sameSite')
+                 if k in c and c[k] not in (None, '')}
+                for c in cks if 'echemi' in str(c.get('domain', ''))]
+        if keep:
+            json.dump(keep, open(ECHEMI_COOKIES, 'w', encoding='utf-8'),
+                      ensure_ascii=False, indent=1)
+            log(f'refreshed {len(keep)} echemi cookies')
+    except Exception as e:
+        log('cookie save err', e)
+
+
+def open_domestic(page):
+    """Click the China Domestic Price tab of the chart widget."""
+    for sel in ('text=China Domestic Price', 'text=China Domestic', 'text=国内价格'):
+        try:
+            loc = page.locator(sel).first
+            if loc.count() and loc.is_visible(timeout=1200):
+                loc.click(timeout=3000)
+                page.wait_for_timeout(4000)
+                return True
+        except Exception:
+            pass
+    return False
+
+
+def _iso(v):
+    s = str(v or '').strip()
+    for fmt in ('%Y-%m-%d', '%Y/%m/%d', '%m/%d/%Y'):
+        try:
+            return datetime.strptime(s, fmt).strftime('%Y-%m-%d')
+        except ValueError:
+            continue
+    return None
+
+
+if __name__ == '__main__':
+    # entry point of scripts/my_chrome.bat: bootstrap + open the scratch Chrome
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
+    ok = ensure_scratch_chrome()
+    print('my-chrome ready' if ok else 'my-chrome FAILED')
+    sys.exit(0 if ok else 1)

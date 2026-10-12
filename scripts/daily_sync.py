@@ -52,78 +52,7 @@ def run(step, args, timeout=600):
         traceback.print_exc(file=sys.stdout)
         return False
 
-# --- my-chrome: echemi steps attach to a scratch Chrome carrying the user's
-# session (no slider). On by default; set SCI99_MY_CHROME=0 to opt out.
-# If the scratch Chrome cannot start, echemi steps fall back to profile mode.
-MY_CDP = os.environ.get('SCI99_MY_CDP', 'http://127.0.0.1:9222')
-SCRATCH = os.path.join(HERE, '.mychrome_profile')
-_REAL_PROFILES = [
-    os.path.join(os.environ.get('LOCALAPPDATA', ''), r'Google\Chrome\User Data'),
-    r'C:\Users\DELL\AppData\Local\Google\Chrome\User Data',
-]
-_CHROME_CANDIDATES = [
-    r'C:\Program Files\Google\Chrome\Application\chrome.exe',
-    r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe',
-    os.path.join(os.environ.get('LOCALAPPDATA', ''), r'Google\Chrome\Application\chrome.exe'),
-]
-
-def _cdp_up(timeout=2):
-    try:
-        import urllib.request
-        with urllib.request.urlopen(MY_CDP + '/json/version', timeout=timeout) as r:
-            return r.status == 200
-    except Exception:
-        return False
-
-def _ensure_scratch_profile():
-    """First run: copy Local State/Cookies/Preferences from the real Chrome
-    profile into .mychrome_profile so the session passes echemi's slider."""
-    import shutil
-    if os.path.exists(os.path.join(SCRATCH, 'Local State')):
-        return True  # already bootstrapped, its cookies persist + refresh
-    real = next((p for p in _REAL_PROFILES if os.path.exists(p)), None)
-    if not real:
-        return False
-    try:
-        os.makedirs(os.path.join(SCRATCH, 'Default', 'Network'), exist_ok=True)
-        shutil.copy2(os.path.join(real, 'Local State'), os.path.join(SCRATCH, 'Local State'))
-        for rel in (r'Default\Network\Cookies', r'Default\Preferences'):
-            src = os.path.join(real, rel)
-            if os.path.exists(src):
-                shutil.copy2(src, os.path.join(SCRATCH, rel))
-        return True
-    except Exception as e:
-        log(f'my-chrome: profile bootstrap failed: {e}')
-        return False
-
-def ensure_my_chrome():
-    """True when the echemi steps should run with --my-chrome."""
-    if os.environ.get('SCI99_MY_CHROME') == '0':
-        return False
-    if _cdp_up():
-        log(f'my-chrome: attach to scratch Chrome at {MY_CDP}')
-        return True
-    chrome = next((c for c in _CHROME_CANDIDATES if os.path.exists(c)), None)
-    if not chrome or not _ensure_scratch_profile():
-        log('my-chrome: no Chrome/profile found - echemi falls back to profile mode')
-        return False
-    subprocess.Popen(
-        [chrome,
-         f'--user-data-dir={SCRATCH}',
-         '--remote-debugging-port=9222',
-         '--remote-allow-origins=*',
-         '--no-first-run', '--no-default-browser-check',
-         'https://www.echemi.com/'],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
-    )
-    for _ in range(15):
-        time.sleep(1)
-        if _cdp_up():
-            log(f'my-chrome: scratch Chrome ready at {MY_CDP}')
-            return True
-    log('my-chrome: scratch Chrome did not come up - echemi falls back to profile mode')
-    return False
+from cdp_browser import ensure_scratch_chrome
 
 def main():
     log(f'DAILY SYNC START pid={os.getpid()}')
@@ -147,7 +76,7 @@ def main():
     results['mcp'] = run('update_mcp_two_blocks.py', ['update_mcp_two_blocks.py'], timeout=180)
 
     # 5b) Choline 60% from echemi (scratch Chrome my-chrome mode; non-core)
-    my_ok = ensure_my_chrome()
+    my_ok = ensure_scratch_chrome(log=log)
     echemi_args = ['--my-chrome'] if my_ok else []
     results['choline_echemi'] = run('update_choline_echemi.py', ['update_choline_echemi.py'] + echemi_args, timeout=300)
 
