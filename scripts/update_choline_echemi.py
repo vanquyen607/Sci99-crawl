@@ -4,6 +4,7 @@ injected verification cookies) and append new dates into sheet 氯化胆碱 bloc
 Non-core step: SKIP (exit 0) when blocked or no new data.
 """
 import sys, io, os, json, time, random
+import urllib.request
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace', line_buffering=True)
 from datetime import datetime
@@ -63,6 +64,21 @@ CHROME_EXE = r'C:\Program Files\Google\Chrome\Application\chrome.exe'
 if not os.path.exists(CHROME_EXE):
     CHROME_EXE = r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe'
 CDP_PORT = 9333
+# Attach to the USER's own Chrome (start it via scripts\my_chrome.bat, run with
+# --my-chrome): his echemi session is already verified => no Aliyun slider.
+MY_CDP = os.environ.get('SCI99_MY_CDP', 'http://127.0.0.1:9222')
+
+
+def my_chrome_requested():
+    return '--my-chrome' in sys.argv or os.environ.get('SCI99_MY_CHROME') == '1'
+
+
+def my_chrome_ready():
+    try:
+        urllib.request.urlopen(MY_CDP + '/json/version', timeout=2)
+        return True
+    except Exception:
+        return False
 
 
 def is_blocked(page):
@@ -140,7 +156,10 @@ def human_drag(page):
 def save_cookies(browser):
     try:
         cks = browser.contexts[0].cookies()
-        keep = [c for c in cks if 'echemi' in c['domain']]
+        keep = [{k: c[k] for k in ('name', 'value', 'domain', 'path', 'expires',
+                                   'httpOnly', 'secure', 'sameSite')
+                 if k in c and c[k] not in (None, '')}
+                for c in cks if 'echemi' in str(c.get('domain', ''))]
         if keep:
             json.dump(keep, open(COOKIES, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
             print(f'refreshed {len(keep)} echemi cookies -> {os.path.basename(COOKIES)}')
@@ -165,138 +184,163 @@ def fetch_echemi():
     import subprocess
     import urllib.request
 
-    kill_profile_chrome()  # stale instance from a crashed run
-    time.sleep(1)
-    os.makedirs(PROFILE, exist_ok=True)
-    for lf in ('lockfile', 'SingletonLock', 'SingletonCookie'):
-        try:
-            os.remove(os.path.join(PROFILE, lf))
-        except OSError:
-            pass
+    my_ok = False
+    if my_chrome_requested():
+        my_ok = my_chrome_ready()
+        if not my_ok:
+            print(f'my-chrome: {MY_CDP} not open (run scripts\\my_chrome.bat) - profile chrome')
 
-    # launch CLEAN Chrome (subprocess — no playwright flags, navigator.webdriver=false)
-    args = [CHROME_EXE, f'--user-data-dir={PROFILE}',
-            f'--remote-debugging-port={CDP_PORT}', '--remote-allow-origins=*',
-            '--no-first-run', '--no-default-browser-check', URL]
-    try:
-        proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except Exception as e:
-        print(f'SKIP: cannot launch chrome: {e}')
-        return None
-    port_ok = False
-    for _ in range(40):
+    proc = None
+    if my_ok:
+        print(f'my-chrome: using your Chrome at {MY_CDP} (no slider expected)')
+    else:
+        kill_profile_chrome()  # stale instance from a crashed run
+        time.sleep(1)
+        os.makedirs(PROFILE, exist_ok=True)
+        for lf in ('lockfile', 'SingletonLock', 'SingletonCookie'):
+            try:
+                os.remove(os.path.join(PROFILE, lf))
+            except OSError:
+                pass
+
+        # launch CLEAN Chrome (subprocess — no playwright flags, navigator.webdriver=false)
+        args = [CHROME_EXE, f'--user-data-dir={PROFILE}',
+                f'--remote-debugging-port={CDP_PORT}', '--remote-allow-origins=*',
+                '--no-first-run', '--no-default-browser-check', URL]
         try:
-            urllib.request.urlopen(f'http://127.0.0.1:{CDP_PORT}/json/version', timeout=2)
-            port_ok = True
-            break
-        except Exception:
-            time.sleep(0.5)
-    if not port_ok:
-        print('SKIP: chrome CDP port not ready')
-        try:
-            proc.kill()
-        except Exception:
-            pass
-        return None
+            proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception as e:
+            print(f'SKIP: cannot launch chrome: {e}')
+            return None
+        port_ok = False
+        for _ in range(40):
+            try:
+                urllib.request.urlopen(f'http://127.0.0.1:{CDP_PORT}/json/version', timeout=2)
+                port_ok = True
+                break
+            except Exception:
+                time.sleep(0.5)
+        if not port_ok:
+            print('SKIP: chrome CDP port not ready')
+            try:
+                proc.kill()
+            except Exception:
+                pass
+            return None
 
     data = None
     try:
-        with sync_playwright() as p:
-            browser = p.chromium.connect_over_cdp(f'http://127.0.0.1:{CDP_PORT}')
-            ctx = browser.contexts[0]
-            page = None
-            for pg in ctx.pages:
-                if 'echemi.com' in pg.url:
-                    page = pg
-                    break
-            if page is None:
-                page = ctx.pages[0] if ctx.pages else ctx.new_page()
-            # belt-and-braces: inject saved cookies (profile already has them too)
+        if my_ok:
+            from cdp_browser import connect as cdp_connect
+            browser = cdp_connect(MY_CDP)
+            page = browser.new_tab()  # scratch tab: never touch the user's own tabs
             try:
-                saved = json.load(open(COOKIES, encoding='utf-8'))
-                ctx.add_cookies(saved)
-            except Exception as ce:
-                print('cookie inject err', ce)
-            page.goto(URL, wait_until='domcontentloaded', timeout=45000)
-
-            blocked, t, body = False, '', ''
-            for _ in range(12):
-                page.wait_for_timeout(2000)
-                blocked, t, body = is_blocked(page)
-                if blocked or len(body) > 400:
-                    break
-            print(f'page title={t!r} blocked={blocked}')
-
-            if blocked:
-                page.wait_for_timeout(3000)
-                for attempt in range(1, 4):
-                    print(f'slider attempt {attempt}')
-                    if not human_drag(page):
-                        print('slider not found')
+                data = _grab(page, browser, my_ok)
+            finally:
+                try:
+                    page.close()
+                except Exception:
+                    pass
+        else:
+            with sync_playwright() as p:
+                browser = p.chromium.connect_over_cdp(f'http://127.0.0.1:{CDP_PORT}')
+                ctx = browser.contexts[0]
+                page = None
+                for pg in ctx.pages:
+                    if 'echemi.com' in pg.url:
+                        page = pg
                         break
-                    page.wait_for_timeout(4000)
-                    blocked, t, body = is_blocked(page)
-                    if not blocked:
-                        print('slider PASSED')
-                        break
-                    # refresh widget for next attempt
-                    try:
-                        rf = page.locator('[class*=refresh], [id*=refresh]').first
-                        if rf.count() and rf.is_visible(timeout=800):
-                            rf.click()
-                            page.wait_for_timeout(2500)
-                    except Exception:
-                        page.goto(URL, wait_until='domcontentloaded', timeout=45000)
-                        page.wait_for_timeout(5000)
-
-            blocked, t, body = is_blocked(page)
-            if blocked:
-                print('>>> auto slider failed — slide MANUALLY in the Chrome window (waiting 75s) <<<')
-                for _ in range(25):
-                    page.wait_for_timeout(3000)
-                    blocked, t, body = is_blocked(page)
-                    if not blocked:
-                        print('manual slide PASSED')
-                        break
-            blocked, t, body = is_blocked(page)
-            if blocked:
-                print(f'SKIP: verification not passed (title={t!r}) — open echemi in your real Chrome once, '
-                      f'then re-export echemi_cookies.json (see SKILL.md Troubleshooting)')
+                if page is None:
+                    page = ctx.pages[0] if ctx.pages else ctx.new_page()
+                try:
+                    saved = json.load(open(COOKIES, encoding='utf-8'))
+                    ctx.add_cookies(saved)
+                except Exception as ce:
+                    print('cookie inject err', ce)
+                data = _grab(page, browser, my_ok)
                 try:
                     browser.close()
                 except Exception:
                     pass
-                return None
-
-            save_cookies(browser)  # auto-refresh: store new acw_tc etc.
-
-            for sel in ['text=China Domestic Price', 'text=China Domestic', 'text=国内价格']:
-                try:
-                    loc = page.locator(sel).first
-                    if loc.count() and loc.is_visible(timeout=1200):
-                        loc.click(timeout=3000)
-                        page.wait_for_timeout(4000)
-                        break
-                except Exception:
-                    pass
-            page.wait_for_timeout(2500)
-            data = page.evaluate(EXTRACT_JS)
-            if not data.get('echarts'):
-                print(f'no echarts data (bodyLen={data.get("bodyLen")})')
-                data = None
-            try:
-                browser.close()
-            except Exception:
-                pass
     except Exception as e:
         print(f'fetch error: {e}')
     finally:
         try:
-            proc.kill()
+            if proc:
+                proc.kill()
         except Exception:
             pass
-        time.sleep(1)
-        kill_profile_chrome()
+        if not my_ok:
+            time.sleep(1)
+            kill_profile_chrome()
+    return data
+
+
+def _grab(page, browser, my_ok):
+    """Navigate, pass the slider if any, extract the domestic chart. None on failure."""
+    page.goto(URL, wait_until='domcontentloaded', timeout=45000)
+
+    blocked, t, body = False, '', ''
+    for _ in range(12):
+        page.wait_for_timeout(2000)
+        blocked, t, body = is_blocked(page)
+        if blocked or len(body) > 400:
+            break
+    print(f'page title={t!r} blocked={blocked}')
+
+    if blocked:
+        page.wait_for_timeout(3000)
+        for attempt in range(1, 4):
+            print(f'slider attempt {attempt}')
+            if not human_drag(page):
+                print('slider not found')
+                break
+            page.wait_for_timeout(4000)
+            blocked, t, body = is_blocked(page)
+            if not blocked:
+                print('slider PASSED')
+                break
+            # refresh widget for next attempt
+            try:
+                rf = page.locator('[class*=refresh], [id*=refresh]').first
+                if rf.count() and rf.is_visible(timeout=800):
+                    rf.click()
+                    page.wait_for_timeout(2500)
+            except Exception:
+                page.goto(URL, wait_until='domcontentloaded', timeout=45000)
+                page.wait_for_timeout(5000)
+
+    blocked, t, body = is_blocked(page)
+    if blocked:
+        print('>>> auto slider failed — slide MANUALLY in the Chrome window (waiting 75s) <<<')
+        for _ in range(25):
+            page.wait_for_timeout(3000)
+            blocked, t, body = is_blocked(page)
+            if not blocked:
+                print('manual slide PASSED')
+                break
+    blocked, t, body = is_blocked(page)
+    if blocked:
+        print(f'SKIP: verification not passed (title={t!r}) — open echemi in your real Chrome once, '
+              f'then re-export echemi_cookies.json (see SKILL.md Troubleshooting)')
+        return None
+
+    save_cookies(browser)  # auto-refresh: store new acw_tc etc.
+
+    for sel in ['text=China Domestic Price', 'text=China Domestic', 'text=国内价格']:
+        try:
+            loc = page.locator(sel).first
+            if loc.count() and loc.is_visible(timeout=1200):
+                loc.click(timeout=3000)
+                page.wait_for_timeout(4000)
+                break
+        except Exception:
+            pass
+    page.wait_for_timeout(2500)
+    data = page.evaluate(EXTRACT_JS)
+    if not data.get('echarts'):
+        print(f'no echarts data (bodyLen={data.get("bodyLen")})')
+        data = None
     return data
 
 

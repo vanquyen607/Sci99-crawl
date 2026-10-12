@@ -40,6 +40,24 @@ CHROME_EXE = r'C:\Program Files\Google\Chrome\Application\chrome.exe'
 if not os.path.exists(CHROME_EXE):
     CHROME_EXE = r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe'
 
+# Attach to the USER's own Chrome (start it via scripts\my_chrome.bat, then run
+# with --my-chrome): his echemi session is already verified => no Aliyun slider.
+MY_CDP = os.environ.get('SCI99_MY_CDP', 'http://127.0.0.1:9222')
+MY_MODE = False
+
+
+def my_chrome_requested():
+    return '--my-chrome' in sys.argv or os.environ.get('SCI99_MY_CHROME') == '1'
+
+
+def my_chrome_ready():
+    try:
+        urllib.request.urlopen(MY_CDP + '/json/version', timeout=2)
+        return True
+    except Exception:
+        return False
+
+
 DOMESTIC = ['text=China Domestic Price', 'text=China Domestic', 'text=国内价格']
 
 EXTRACT_JS = '''() => {
@@ -194,7 +212,10 @@ def unblock(page, url, label, manual_wait=0):
 def save_cookies(browser):
     try:
         cks = browser.contexts[0].cookies()
-        keep = [c for c in cks if 'echemi' in c['domain']]
+        keep = [{k: c[k] for k in ('name', 'value', 'domain', 'path', 'expires',
+                                   'httpOnly', 'secure', 'sameSite')
+                 if k in c and c[k] not in (None, '')}
+                for c in cks if 'echemi' in str(c.get('domain', ''))]
         if keep:
             json.dump(keep, open(COOKIES, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
             print(f'refreshed {len(keep)} echemi cookies')
@@ -204,6 +225,19 @@ def save_cookies(browser):
 
 def launch():
     from playwright.sync_api import sync_playwright
+    global MY_MODE
+    if my_chrome_requested():
+        if my_chrome_ready():
+            MY_MODE = True
+            try:
+                from cdp_browser import connect as cdp_connect
+                browser = cdp_connect(MY_CDP)
+                print(f'my-chrome: attached to {MY_CDP} (your profile, no slider)')
+                return None, browser
+            except Exception as e:
+                print(f'my-chrome: CDP attach failed ({str(e)[:70]}) - profile chrome')
+        else:
+            print(f'my-chrome: {MY_CDP} not open (run scripts\\my_chrome.bat) - profile chrome')
     kill_profile_chrome()
     time.sleep(1)
     os.makedirs(PROFILE, exist_ok=True)
@@ -250,10 +284,23 @@ def launch():
         return None, None
 
 
+_MY_TAB = None
+
+
 def fetch(browser, url, label):
     """Charts of one product page, or None."""
+    global _MY_TAB
+    if MY_MODE:
+        # one scratch tab reused across products: fewer new-tab signals
+        if _MY_TAB is None:
+            _MY_TAB = browser.contexts[0].new_page()
+        return _fetch_page(_MY_TAB, url, label)
     ctx = browser.contexts[0]
     page = ctx.pages[0] if ctx.pages else ctx.new_page()
+    return _fetch_page(page, url, label)
+
+
+def _fetch_page(page, url, label):
     try:
         page.goto(url, wait_until='domcontentloaded', timeout=45000)
     except Exception as e:
@@ -363,6 +410,7 @@ def to_fresh(iso, price, k):
 
 
 def main():
+    global _MY_TAB
     sh = RL.open_sh()
     allt = RL.all_titles(sh)
     titles = []
@@ -442,6 +490,12 @@ def main():
             for iso, price in pairs:
                 fresh[t].append(to_fresh(iso, price, keys[t]))
         save_cookies(browser)
+        if _MY_TAB is not None:
+            try:
+                _MY_TAB.close()
+            except Exception:
+                pass
+            _MY_TAB = None
     finally:
         try:
             if browser:
