@@ -132,7 +132,7 @@ python -X utf8 scripts\daily_sync.py
 3. `update_from_detail_pages.py` — detail-page products — **core**
 4. `update_amino_from_articles.py` — 3 amino từ article
 5. `update_mcp_two_blocks.py` — 磷酸二氢钙 — **core**
-6. `update_choline_echemi.py` — 氯化胆碱 60% (echemi): tự launch Chrome sạch (`--remote-debugging-port`) + CDP, auto-kéo Aliyun slider khi cookie cũ, **tự export cookie mới** vào `echemi_cookies.json` khi qua; non-core, SKIP nếu vẫn kẹt (chạy manual thì kéo tay trong 75s chờ sẵn)
+6. `update_choline_echemi.py` — 氯化胆碱 60% (echemi): mặc định chạy `--my-chrome` (attach Chrome scratch `scripts\.mychrome_profile` port 9222 mang session thật → không slider; daily_sync tự mở nếu chưa chạy). Fallback: Chrome profile `\.echemi_profile` + auto-kéo slider, **tự export cookie mới**; non-core, SKIP nếu vẫn kẹt
 7. `update_mdcph_weekly.py` — 磷酸一二钙-每周 (vip.sci99 API → PDF周报 → pymupdf; non-core, SKIP khi chưa có report mới — báo ra thứ 5)
 8. `update_whey_sci99.py` — 乳清粉低蛋白 天津 (sci99 search 4 trang, JS pager `li.link-btn[data-current]`, early-stop khi gặp ngày đã có; bài tuần — chỉ có bài mới vào thứ 2)
 9. `update_inositol_100ppi.py` — 肌醇 99% 湖北 (100ppi `plist-1-7598-N`, playwright vì site chặn requests; early-stop khi trang cũ hơn sheet; ~3 trang lịch sử là tối đa)
@@ -141,7 +141,7 @@ python -X utf8 scripts\daily_sync.py
 **Sheet mới (5 updater, mỗi nguồn 1 lần ghi batch):**
 
 11. `update_raw_100ppi.py` — 26 tab (playwright; strict trader filter: tab thiếu row trader → skip)
-12. `update_raw_echemi.py` — 15 tab (headless Chrome CDP 9335 + chart score)
+12. `update_raw_echemi.py` — 15 tab (`--my-chrome` mặc định, fallback CDP 9335 profile + chart score)
 13. `update_raw_sci99.py` — 6 tab prices.sci99 detail (header-driven, spec/market filter)
 14. `update_raw_sci99_pdf.py` — 2 tab vip.sci99 PDF (SKIP khi chưa có report mới)
 15. `update_raw_cnbg.py` — 2 tab chinabgao 三甲胺, mỗi tab 1 loại (`鲁西化工` / `国产99.99%`): đọc **article mới nhất** từ trang index A1 (index chỉ có 3报价, article tới 10); khớp theo `产地/品牌` + `备注`, ngày thiếu đúng loại → **skip**, không thay报价 khác
@@ -199,7 +199,7 @@ python -X utf8 scripts\verify_all_status.py
 | Tkinter crash từ thread | Không `self.after()` từ worker — dùng `queue.Queue` + poll |
 | Ngày trùng | `scripts\tools\scan_duplicate_dates.py --fix` |
 | EU format / future date | `scripts\tools\format_vit_palm_sheet.py` |
-| echemi hiện "滑动验证页面" (choline SKIP) | Bước 6 tự auto-kéo slider + tự refresh cookie nếu qua được. Vẫn SKIP → chạy tay `python -X utf8 scripts\update_choline_echemi.py`, window mở ra kéo slider trong 75s; script sẽ tự lưu cookie mới. Profile Chrome step này: `scripts\.echemi_profile` (riêng, không đụng Chrome của user) |
+| echemi hiện "滑动验证页面" (choline SKIP) | daily_sync đã mặc định chạy `--my-chrome` (scratch Chrome `.mychrome_profile`, tự mở khi task 15:00 chạy; session pass thẳng, không slider). Nếu vẫn hiện → chạy tay: mở `scripts\my_chrome.bat` rồi `python -X utf8 scripts\update_choline_echemi.py --my-chrome`; hoặc chạy không cờ để fallback, window mở ra kéo slider trong 75s, script tự lưu cookie mới. Tắt hẳn my-chrome: set env `SCI99_MY_CHROME=0` |
 
 ## Lưu ý
 
