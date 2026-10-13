@@ -21,6 +21,7 @@ __pycache__/
 scripts/logs/
 logs/
 *.log
+scripts/gui_state.json
 
 # --- data cache sinh tự động (daily_sync ghi lại mỗi lần chạy) ---
 scripts/mcp_cjj_articles.json
