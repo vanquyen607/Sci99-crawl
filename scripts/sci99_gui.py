@@ -101,6 +101,13 @@ STEPS = [
 _TS = r'^\[\d{2}:\d{2}:\d{2}\] '
 
 
+def _is_slide_wait(msg):
+    """Dòng báo echemi đang chờ slider (auto fail → chờ người kéo tay)."""
+    low = msg.lower()
+    return ('slide manually' in low or 'slider attempt' in low
+            or ('verification' in low and 'title=' in low))
+
+
 class ToolTip:
     """Hover tooltip cho nút bấm (desktop-app feel)."""
     def __init__(self, widget, text):
@@ -1369,6 +1376,10 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
             stt.pack(side='right')
             if core:
                 ToolTip(nm, '★ Bước cốt lõi — daily_sync exit 0 chỉ khi bước này OK')
+            elif rk in ('choline_echemi', 'raw_echemi'):
+                ToolTip(nm, 'echemi: mỗi trang tự kéo slider 3 lần hết nấc sang phải; '
+                            'nếu vẫn kẹt, cửa sổ Chrome bật lên và chờ BẠN kéo tay '
+                            '(choline 75s · raw mỗi trang 60s) rồi chạy tiếp')
             self.step_rows.append({'frame': rf, 'badge': badge, 'name': nm, 'status': stt,
                                    'time': t, 'state': 'pending', 't0': None})
 
@@ -1451,6 +1462,7 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
                 self._set_step(idx, 'running', '⏱ 0s')
                 self.step_rows[idx]['t0'] = time.time()
                 self.lbl_run_state.config(text=f"▶ {STEPS[idx][1]} …", fg=C['accent'])
+                self._slide_flashed = False
             return
         m = re.match(_TS + r'OK (\S+) \((\d+)s\)$', line)
         if m:
@@ -1472,6 +1484,17 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
             if idx is not None:
                 self._set_step(idx, 'fail', 'timeout')
             return
+        # --- echemi slider: báo ngay khi script chờ người kéo tay ---
+        low = line.lower()
+        if _is_slide_wait(line):
+            self.lbl_run_state.config(
+                text='🖐 echemi chờ bạn KÉO SLIDER trong cửa sổ Chrome!',
+                fg=C['warn'])
+            if not getattr(self, '_slide_flashed', False):
+                self._slide_flashed = True
+                self._flash_window()
+        elif 'manual slide passed' in low:
+            self.lbl_run_state.config(text='✔ qua xác thực — chạy tiếp…', fg=C['ok'])
         if line.startswith('RESULTS '):
             try:
                 self._apply_results(ast.literal_eval(line[len('RESULTS '):].strip()))
@@ -1500,6 +1523,11 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
             return ('ok',)
         if re.match(_TS + r'(FAIL|TIMEOUT|ERROR)', msg) or re.match(r'^(FAIL|TIMEOUT|ERROR)\b', msg):
             return ('err',)
+        low = msg.lower()
+        if 'manual slide passed' in low:
+            return ('ok',)
+        if _is_slide_wait(msg):
+            return ('warn',)
         if re.match(r'^\[?\d{2}:\d{2}:\d{2}\]? (WARN|SKIP)' , msg) or msg.startswith('SKIP'):
             return ('warn',)
         if msg.startswith('$ ') or msg.startswith('RESULTS') or 'DAILY SYNC' in msg[:45]:
@@ -1547,6 +1575,8 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
         self.lbl_status.config(text='● Sync đang chạy…', fg=C['info'])
         self.txt_run.delete('1.0', 'end')
         self._log_run(f'$ daily_sync.py — {len(STEPS)} bước · log đầy đủ trong logs/')
+        self._log_run('  💡 echemi hiện slider → cửa sổ Chrome sẽ bật ra, kéo tay giúp '
+                      '(script chờ 60–75s/trang rồi tự chạy tiếp)')
         self.after(1000, self._tick_run_ui)
         threading.Thread(target=self._run_sync_worker, daemon=True).start()
 

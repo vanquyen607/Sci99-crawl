@@ -8,7 +8,7 @@ Sheets:
 Order matters: the raw updaters run before update_fx_rate.py, which heals the
 汇率/USD column of BOTH sheets last (its stamp only fills empty cells).
 """
-import sys, io, os, subprocess, time, traceback
+import sys, io, os, subprocess, threading, time, traceback
 from datetime import datetime
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
@@ -25,28 +25,48 @@ def log(msg):
     with open(LOG, 'a', encoding='utf-8') as f:
         f.write(line + '\n')
 
+def _kill_tree(pid):
+    """Kill a step and its children (playwright/chrome) — used on timeout."""
+    try:
+        subprocess.run(['taskkill', '/T', '/F', '/PID', str(pid)],
+                       capture_output=True, timeout=10)
+    except Exception:
+        pass
+
 def run(step, args, timeout=600):
+    """Run one step, pumping its output to log + stdout LIVE so the GUI can
+    react while the step runs (echemi waits for a manual slider drag)."""
     log(f'=== STEP: {step} ===')
     t0 = time.time()
     try:
-        r = subprocess.run(
-            [sys.executable, '-X', 'utf8'] + args,
-            cwd=HERE, timeout=timeout,
-            capture_output=True, text=True, encoding='utf-8', errors='replace'
-        )
-        out = (r.stdout or '') + (r.stderr or '')
-        # keep last 80 lines in log
-        tail = '\n'.join(out.splitlines()[-80:])
-        log(tail)
+        p = subprocess.Popen(
+            [sys.executable, '-X', 'utf8'] + args, cwd=HERE,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, encoding='utf-8', errors='replace', bufsize=1)
+
+        def _pump():
+            try:
+                for ln in p.stdout:
+                    log(ln.rstrip('\n'))
+            except Exception:
+                pass
+
+        th = threading.Thread(target=_pump, daemon=True)
+        th.start()
+        while p.poll() is None and time.time() - t0 < timeout:
+            time.sleep(0.5)
+        if p.poll() is None:
+            _kill_tree(p.pid)
+            th.join(5)
+            log(f'TIMEOUT {step} after {timeout}s')
+            return False
+        th.join(10)
         elapsed = time.time() - t0
-        if r.returncode != 0:
-            log(f'FAIL {step} rc={r.returncode} ({elapsed:.0f}s)')
+        if p.returncode != 0:
+            log(f'FAIL {step} rc={p.returncode} ({elapsed:.0f}s)')
             return False
         log(f'OK {step} ({elapsed:.0f}s)')
         return True
-    except subprocess.TimeoutExpired:
-        log(f'TIMEOUT {step} after {timeout}s')
-        return False
     except Exception as e:
         log(f'ERROR {step}: {e}')
         traceback.print_exc(file=sys.stdout)
