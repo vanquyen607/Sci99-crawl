@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Echemi browser layer: CDP driver, my-chrome mode, profile fallback, Aliyun slider.
+"""Echemi browser layer: raw CDP driver + profile Chrome + Aliyun slider.
 
 Playwright's connect_over_cdp dies on Chrome 136+ with
 "Browser.setDownloadBehavior: Browser context management is not supported",
@@ -7,43 +7,32 @@ so the driver talks raw DevTools Protocol over websocket (websockets lazily
 imported). Only the subset the echemi scripts need is implemented:
 new tab, goto, evaluate JS, locator, mouse drag, cookies, close.
 
-Shared by update_raw_echemi.py / update_choline_echemi.py / daily_sync.py:
-  - my-chrome mode: attach to the user's real Chrome on MY_CDP (port 9222,
-    started by scripts/my_chrome.bat or ensure_scratch_chrome) - session is
-    already verified => no Aliyun slider.
-  - profile fallback: clean Chrome on scripts/.echemi_profile + its own CDP
+Shared by update_raw_echemi.py / update_choline_echemi.py:
+  - profile mode: clean Chrome on scripts/.echemi_profile + its own CDP
     port, cookies injected from echemi_cookies.json.
-  - Aliyun slider helpers (is_blocked/human_drag/unblock) work on both
-    playwright pages and the raw cdp Tab.
+  - Aliyun slider helpers (is_blocked/human_drag/unblock): 3 auto-slides
+    to the full right end, then an optional manual-wait window.
+  - helpers work on both playwright pages and the raw cdp Tab.
 
 Usage:
     from cdp_browser import connect, launch_echemi, unblock
 """
-import io
 import json
 import os
 import random
-import shutil
 import subprocess
-import sys
 import time
 import urllib.request
 from datetime import datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ECHEMI_COOKIES = os.path.join(HERE, 'echemi_cookies.json')
-SCRATCH_PROFILE = os.path.join(HERE, '.mychrome_profile')
-MY_CDP = os.environ.get('SCI99_MY_CDP', 'http://127.0.0.1:9222')
 
 CHROME_EXE = next((c for c in (
     r'C:\Program Files\Google\Chrome\Application\chrome.exe',
     r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe',
     os.path.join(os.environ.get('LOCALAPPDATA', ''), r'Google\Chrome\Application\chrome.exe'),
 ) if os.path.exists(c)), None)
-
-REAL_PROFILES = [
-    os.path.join(os.environ.get('LOCALAPPDATA', ''), r'Google\Chrome\User Data'),
-]
 
 
 # --------------------------------------------------------------------------
@@ -281,73 +270,15 @@ def connect(cdp_url='http://127.0.0.1:9222'):
 
 
 # --------------------------------------------------------------------------
-# my-chrome mode (user's real Chrome on port 9222, no slider)
+# CDP port probe + profile mode (clean Chrome + saved cookies, own CDP port)
 # --------------------------------------------------------------------------
 
-def my_chrome_requested(argv=None):
-    argv = sys.argv if argv is None else argv
-    return '--my-chrome' in argv or os.environ.get('SCI99_MY_CHROME') == '1'
-
-
-def cdp_up(cdp_url=MY_CDP, timeout=2):
+def cdp_up(cdp_url, timeout=2):
     try:
         urllib.request.urlopen(cdp_url + '/json/version', timeout=timeout)
         return True
     except Exception:
         return False
-
-
-def _bootstrap_scratch_profile(log=print):
-    """First run: copy Local State/Cookies/Preferences from the real Chrome
-    profile into .mychrome_profile so the session passes echemi's slider."""
-    if os.path.exists(os.path.join(SCRATCH_PROFILE, 'Local State')):
-        return True  # already bootstrapped, its cookies persist + refresh
-    real = next((p for p in REAL_PROFILES if os.path.exists(p)), None)
-    if not real:
-        return False
-    try:
-        os.makedirs(os.path.join(SCRATCH_PROFILE, 'Default', 'Network'), exist_ok=True)
-        shutil.copy2(os.path.join(real, 'Local State'), os.path.join(SCRATCH_PROFILE, 'Local State'))
-        for rel in (r'Default\Network\Cookies', r'Default\Preferences'):
-            src = os.path.join(real, rel)
-            if os.path.exists(src):
-                shutil.copy2(src, os.path.join(SCRATCH_PROFILE, rel))
-        return True
-    except Exception as e:
-        log(f'my-chrome: profile bootstrap failed: {e}')
-        return False
-
-
-def ensure_scratch_chrome(log=print):
-    """Bootstrap + launch the scratch Chrome if needed (daily_sync hook).
-    True when the echemi steps should run with --my-chrome."""
-    if os.environ.get('SCI99_MY_CHROME') == '0':
-        return False
-    if cdp_up():
-        log(f'my-chrome: attach to scratch Chrome at {MY_CDP}')
-        return True
-    if not CHROME_EXE or not _bootstrap_scratch_profile(log):
-        log('my-chrome: no Chrome/profile found - echemi falls back to profile mode')
-        return False
-    subprocess.Popen(
-        [CHROME_EXE,
-         f'--user-data-dir={SCRATCH_PROFILE}',
-         '--remote-debugging-port=9222',
-         '--remote-allow-origins=*',
-         '--no-first-run', '--no-default-browser-check',
-         '--disable-optimization-guide-model-download',
-         '--disable-features=OptimizationGuideModelDownloading,SODAOnDeviceRecognition',
-         'https://www.echemi.com/'],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
-    )
-    for _ in range(15):
-        time.sleep(1)
-        if cdp_up():
-            log(f'my-chrome: scratch Chrome ready at {MY_CDP}')
-            return True
-    log('my-chrome: scratch Chrome did not come up - echemi falls back to profile mode')
-    return False
 
 
 # --------------------------------------------------------------------------
@@ -403,22 +334,11 @@ def launch_profile_cdp(profile, port, url=None, log=print):
     return None
 
 
-def launch_echemi(profile, port, want_my, url=None, log=print):
-    """Unified start for the echemi updaters.
-    Returns (my_ok, browser, proc, pw): proc/pw are set in profile mode only."""
-    if want_my:
-        if cdp_up():
-            try:
-                browser = connect(MY_CDP)
-                log(f'my-chrome: attached to {MY_CDP} (no slider)')
-                return True, browser, None, None
-            except Exception as e:
-                log(f'my-chrome: CDP attach failed ({str(e)[:70]}) - profile chrome')
-        else:
-            log(f'my-chrome: {MY_CDP} not open (run scripts\\my_chrome.bat) - profile chrome')
+def launch_echemi(profile, port, url=None, log=print):
+    """Start the profile Chrome + connect. Returns (browser, proc, pw)."""
     proc = launch_profile_cdp(profile, port, url=url, log=log)
     if proc is None:
-        return False, None, None, None
+        return None, None, None
     from playwright.sync_api import sync_playwright
     try:
         pw = sync_playwright().start()
@@ -427,14 +347,14 @@ def launch_echemi(profile, port, want_my, url=None, log=print):
             browser.contexts[0].add_cookies(json.load(open(ECHEMI_COOKIES, encoding='utf-8')))
         except Exception as e:
             log('cookie inject err', e)
-        return False, browser, proc, pw
+        return browser, proc, pw
     except Exception as e:
         log(f'SKIP CDP connect failed: {e}')
         try:
             proc.kill()
         except Exception:
             pass
-        return False, None, None, None
+        return None, None, None
 
 
 def shutdown_echemi(browser, pw, proc, profile=None, log=print):
@@ -620,11 +540,3 @@ def _iso(v):
         except ValueError:
             continue
     return None
-
-
-if __name__ == '__main__':
-    # entry point of scripts/my_chrome.bat: bootstrap + open the scratch Chrome
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
-    ok = ensure_scratch_chrome()
-    print('my-chrome ready' if ok else 'my-chrome FAILED')
-    sys.exit(0 if ok else 1)

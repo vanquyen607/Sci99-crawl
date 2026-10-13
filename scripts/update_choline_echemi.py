@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """Daily: fetch China Domestic choline chloride 60% from echemi (real-Chrome profile +
 injected verification cookies) and append new dates into sheet 氯化胆碱 block2 (col T/19).
-With --my-chrome (daily_sync default) it attaches to the user's verified session
-instead - no Aliyun slider. Non-core step: SKIP (exit 0) when blocked or no new data.
+Slider: 3 auto-drags to the full right end, then wait up to 75s for a manual drag.
+Non-core step: SKIP (exit 0) when blocked or no new data.
 """
 import sys, io, os
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
@@ -23,7 +23,7 @@ WIDTH = 17
 HEADER_ROWS = 2
 
 import newsheet_lib
-from cdp_browser import (is_blocked, launch_echemi, my_chrome_requested,
+from cdp_browser import (is_blocked, launch_echemi,
                          open_domestic, save_echemi_cookies, shutdown_echemi, unblock)
 
 EXTRACT_JS = '''() => {
@@ -63,35 +63,26 @@ def date_key(s):
 
 
 def fetch_echemi():
-    my_ok, browser, proc, pw = launch_echemi(PROFILE, CDP_PORT, my_chrome_requested(), url=URL)
+    browser, proc, pw = launch_echemi(PROFILE, CDP_PORT, url=URL)
     if not browser:
         print('SKIP: no browser')
         return None
     data = None
     try:
-        if my_ok:
-            page = browser.contexts[0].new_page()  # scratch tab: never touch user's tabs
-        else:
-            ctx = browser.contexts[0]
-            page = None
-            for pg in ctx.pages:
-                if 'echemi.com' in pg.url:
-                    page = pg
-                    break
-            if page is None:
-                page = ctx.pages[0] if ctx.pages else ctx.new_page()
+        ctx = browser.contexts[0]
+        page = None
+        for pg in ctx.pages:
+            if 'echemi.com' in pg.url:
+                page = pg
+                break
+        if page is None:
+            page = ctx.pages[0] if ctx.pages else ctx.new_page()
         try:
             data = _grab(page, browser)
-        finally:
-            if my_ok:
-                try:
-                    page.close()
-                except Exception:
-                    pass
-    except Exception as e:
-        print(f'fetch error: {e}')
+        except Exception as e:
+            print(f'fetch error: {e}')
     finally:
-        shutdown_echemi(browser, pw, proc, profile=None if my_ok else PROFILE)
+        shutdown_echemi(browser, pw, proc, profile=PROFILE)
     return data
 
 
@@ -107,8 +98,8 @@ def _grab(page, browser):
             break
     print(f'page title={t!r} blocked={blocked}')
     if not unblock(page, URL, 'choline', manual_wait=75 if blocked else 0):
-        print('>>> verification failed - open echemi in your real Chrome once, '
-              'then run scripts\\my_chrome.bat again (see SKILL.md Troubleshooting)')
+        print('>>> verification failed - drag the slider by hand in the Chrome '
+              'window and run this script again (session/cookies are kept)')
         return None
 
     save_echemi_cookies(browser)  # auto-refresh: store new acw_tc etc.

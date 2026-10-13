@@ -12,8 +12,6 @@ service_account.json
 # --- browser profile + cache ---
 scripts/.echemi_profile/
 .echemi_profile/
-scripts/.mychrome_profile/
-.mychrome_profile/
 
 # --- Python cache ---
 __pycache__/

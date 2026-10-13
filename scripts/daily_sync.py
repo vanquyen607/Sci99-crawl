@@ -52,8 +52,6 @@ def run(step, args, timeout=600):
         traceback.print_exc(file=sys.stdout)
         return False
 
-from cdp_browser import ensure_scratch_chrome
-
 def main():
     log(f'DAILY SYNC START pid={os.getpid()}')
     results = {}
@@ -75,10 +73,8 @@ def main():
     # 5) MCP 磷酸二氢钙 2 blocks
     results['mcp'] = run('update_mcp_two_blocks.py', ['update_mcp_two_blocks.py'], timeout=180)
 
-    # 5b) Choline 60% from echemi (scratch Chrome my-chrome mode; non-core)
-    my_ok = ensure_scratch_chrome(log=log)
-    echemi_args = ['--my-chrome'] if my_ok else []
-    results['choline_echemi'] = run('update_choline_echemi.py', ['update_choline_echemi.py'] + echemi_args, timeout=300)
+    # 5b) Choline 60% from echemi (profile mode; 3 auto-slides then manual; non-core)
+    results['choline_echemi'] = run('update_choline_echemi.py', ['update_choline_echemi.py'], timeout=300)
 
     # 5c) 磷酸一二钙 weekly report (requests + PDF; non-core, skips when no new report)
     results['mdcph_weekly'] = run('update_mdcph_weekly.py', ['update_mdcph_weekly.py'], timeout=240)
@@ -97,8 +93,8 @@ def main():
     #    trader has no row on the page is skipped, never mixed with another)
     results['raw_100ppi'] = run('update_raw_100ppi.py', ['update_raw_100ppi.py'], timeout=900)
 
-    # 7) echemi 15 tabs (scratch Chrome CDP 9222 via --my-chrome, or profile mode)
-    results['raw_echemi'] = run('update_raw_echemi.py', ['update_raw_echemi.py'] + echemi_args, timeout=900)
+    # 7) echemi 15 tabs (profile mode; 3 auto-slides per page, then manual 60s)
+    results['raw_echemi'] = run('update_raw_echemi.py', ['update_raw_echemi.py'], timeout=1800)
 
     # 8) sci99 prices.sci99 detail 6 tabs (header-driven, spec/market filter)
     results['raw_sci99'] = run('update_raw_sci99.py', ['update_raw_sci99.py'], timeout=600)

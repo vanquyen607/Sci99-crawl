@@ -10,8 +10,9 @@ of the newest value when there is no overlap.
 
 The site is behind an Aliyun slider, so Chrome is launched as a real process
 with the saved .echemi_profile + echemi_cookies.json (headless Chromium is
-always challenged); with --my-chrome (daily_sync default) it attaches to the
-user's own verified session instead. Cookies are re-saved after every run.
+always challenged). Each page: 3 auto-slides to the full right end; if still
+blocked the script waits up to 60s for you to drag the slider by hand in the
+Chrome window. Cookies are re-saved after every run.
 
 Quota: one values_batch_get for all 15 tabs + one values_batch_update.
 """
@@ -29,13 +30,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import newsheet_lib as NS
 import raw_lib as RL
-from cdp_browser import (_iso, launch_echemi, my_chrome_requested, open_domestic,
+from cdp_browser import (_iso, launch_echemi, open_domestic,
                          save_echemi_cookies, shutdown_echemi, unblock)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PROFILE = os.path.join(HERE, '.echemi_profile')
 CDP_PORT = 9335
-MY_MODE = False
 
 EXTRACT_JS = '''() => {
     const out = {title: document.title, charts: [], bodyLen: (document.body.innerText || '').length};
@@ -66,24 +66,13 @@ EXTRACT_JS = '''() => {
 
 
 def launch():
-    """(proc, pw, browser) — proc/pw are None in my-chrome mode."""
-    global MY_MODE
-    my_ok, browser, proc, pw = launch_echemi(PROFILE, CDP_PORT, my_chrome_requested())
-    MY_MODE = my_ok
+    """(proc, pw, browser) — always profile mode (.echemi_profile, CDP 9335)."""
+    browser, proc, pw = launch_echemi(PROFILE, CDP_PORT)
     return proc, pw, browser
-
-
-_MY_TAB = None
 
 
 def fetch(browser, url, label):
     """Charts of one product page, or None."""
-    global _MY_TAB
-    if MY_MODE:
-        # one scratch tab reused across products: fewer new-tab signals
-        if _MY_TAB is None:
-            _MY_TAB = browser.contexts[0].new_page()
-        return _fetch_page(_MY_TAB, url, label)
     ctx = browser.contexts[0]
     page = ctx.pages[0] if ctx.pages else ctx.new_page()
     return _fetch_page(page, url, label)
@@ -95,7 +84,7 @@ def _fetch_page(page, url, label):
     except Exception as e:
         print(f'    {label}: goto err {str(e)[:70]}')
         return None
-    if not unblock(page, url, label, manual_wait=45 if label == 'first' else 0):
+    if not unblock(page, url, label, manual_wait=60):
         return None
     open_domestic(page)
     data = None
@@ -181,7 +170,6 @@ def to_fresh(iso, price, k):
 
 
 def main():
-    global _MY_TAB
     sh = RL.open_sh()
     allt = RL.all_titles(sh)
     titles = []
@@ -262,12 +250,6 @@ def main():
             for iso, price in pairs:
                 fresh[t].append(to_fresh(iso, price, keys[t]))
         save_echemi_cookies(browser)
-        if _MY_TAB is not None:
-            try:
-                _MY_TAB.close()
-            except Exception:
-                pass
-            _MY_TAB = None
     finally:
         shutdown_echemi(browser, pw, proc, profile=PROFILE)
 
