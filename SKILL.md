@@ -38,7 +38,7 @@ D:\Desktop\sci99\
 │   ├── update_raw_sci99_pdf.py   # 2 tab vip.sci99 weekly PDF
 │   ├── update_raw_cnbg.py        # 2 tab chinabgao 三甲胺 (鲁西化工 / 国产99.99%)
 │   ├── verify_all_status.py      # batched status 33 + 51 tab (GUI import collect_all)
-│   ├── sci99_gui.py               # GUI 6 tab (Dashboard / Sức khỏe / Dữ liệu / Chạy sync / Cài đặt / Logs), theme ttkbootstrap
+│   ├── sci99_gui.py               # GUI sidebar 5 trang (Tổng quan / Dữ liệu / Chạy sync / Cài đặt / Logs), theme Light/Dark
 │   ├── app_config.py
 │   ├── app_settings.json
 │   ├── Mo app.bat
@@ -165,20 +165,19 @@ python -X utf8 scripts\verify_all_status.py
 
 ## GUI (`Mo app SCI99.bat`)
 
-6 tab — theme `ttkbootstrap` (`bootstrap-light` / `bootstrap-dark`, nút ☀/🌙 lưu vào cài đặt):
+Sidebar dọc 5 trang bên trái (nav active = nền xanh) — theme Light / Dark (nút ☀/🌙 trong sidebar, lưu vào cài đặt; `ttkbootstrap` `bootstrap-light`/`bootstrap-dark`, không có vẫn chạy fallback `clam`):
 
-| Tab | Nội dung |
+| Trang | Nội dung |
 |-----|----------|
-| 🏠 Dashboard | Lịch chạy (Task Scheduler), KPI, trạng thái **2 spreadsheet · 84 tab** (33 + 51, batched ~5s, đánh dấu `[CŨ]`/`[MỚI]`, double-click mở đúng sheet + gid), lịch sử chạy gần đây |
-| 🩺 Sức khỏe | **Quản lý cả 2 sheet**: card `33/33` + `51/51`, bảng 84 tab (mới nhất / dòng / URL A1 / trạng thái), lọc + "chỉ hiện lỗi", double-click mở sheet, **tự đọc batch mỗi 5 phút** |
-| 📁 Dữ liệu | Chuyển **SHEET CŨ (33 tab) / SHEET MỚI (54 tab gồm 3 index)** → xem + Export CSV tab bất kỳ |
+| 📊 Tổng quan | Lịch chạy (Task Scheduler) + nút Chạy ngay/Tạm dừng, KPI hôm nay (✅/⏳/❌), **bảng 84 tab** 2 spreadsheet (mới nhất / dòng / trạng thái, zebra rows, lọc + search, double-click mở đúng sheet + gid), lịch sử chạy gần đây |
+| 📁 Dữ liệu | Chuyển **SHEET CŨ (33 tab) / SHEET MỚI (51 tab)** → xem + tìm + Export CSV tab bất kỳ |
 | ▶ Chạy sync | Tiến trình 18 bước realtime + console (F6 chạy, Esc dừng) |
 | ⚙ Cài đặt | Login sci99, **2 spreadsheet id (cũ + mới)**, Task Scheduler ON/OFF + giờ |
 | 📜 Logs | Đọc `logs/daily_*.log` |
 
 - Phím tắt: `F5` làm mới · `F6` chạy sync · `Esc` dừng
 - Nút ▶ trong GUI = `daily_sync.py` → cập nhật cả 2 sheet
-- Không có `ttkbootstrap` app vẫn chạy (fallback theme `clam`): `pip install ttkbootstrap`
+- Double-click dòng trong bảng Tổng quan → mở Google Sheet đúng tab (gid)
 
 ## Task Scheduler
 
@@ -190,7 +189,7 @@ python -X utf8 scripts\verify_all_status.py
 
 | Lỗi | Giải pháp |
 |-----|-----------|
-| Google API 429 Quota | Verify/raw/fx đều đã batch (`values_batch_get`) + retry 25–60s; vẫn 429 → đợi 1–2 phút chạy lại. GIẢM read: đừng mở lại tab 🩺 liên tục (mỗi lần ~6 call) |
+| Google API 429 Quota | Verify/raw/fx đều đã batch (`values_batch_get`) + retry 25–60s; vẫn 429 → đợi 1–2 phút chạy lại. GIẢM read: đừng refresh bảng Tổng quan liên tục (mỗi lần ~6 call) |
 | Verify báo `NO DATES` / `MISSING` | Tab thiếu header `日期` hoặc bị đổi tên — mở sheet kiểm tra; sheet mới còn thiếu cột ngày nếu updater chưa từng chạy |
 | Login sci99 fail | Chạy GUI → Cài đặt → Save (ghi lại user/pass) rồi retry |
 | sci99 trả 403 Forbidden (WAF rate-limit transient) | Chờ 10–30p rồi chạy lại; detail + amino đã tự retry 2 lần / abort sau 4 liên tiếp. KHÔNG append `?keyword=` vào URL article (gây 403) |

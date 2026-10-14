@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-SCI99 → Google Sheets — Desktop GUI (Light / Pro theme)
+SCI99 → Google Sheets — Desktop GUI (sidebar · Light / Dark)
 Double-click Mo app.bat (or run: python -X utf8 sci99_gui.py)
 """
 import sys, os, re, json, ast, subprocess, threading, time, glob, queue
@@ -24,50 +24,58 @@ BS_THEMES = {'light': 'bootstrap-light', 'dark': 'bootstrap-dark'}
 
 # ---------- palettes: Light / Pro (default) + Dark ----------
 LIGHT = {
-    'bg':       '#f4f6fa',   # app background
-    'surface':  '#ffffff',   # cards
-    'surface2': '#eef2f7',   # nested / input bg
-    'border':   '#dce3ec',
-    'text':     '#0f172a',   # primary
-    'muted':    '#64748b',   # secondary
-    'accent':   '#2563eb',   # blue primary
-    'accent_h': '#1d4ed8',
-    'ok':       '#16a34a',
-    'ok_h':     '#15803d',
-    'warn':     '#d97706',
-    'err':      '#dc2626',
-    'info':     '#0284c7',
-    'tab_bg':   '#e8edf4',
+    'bg':       '#f2f5fa',
+    'surface':  '#ffffff',
+    'surface2': '#e9eff7',
+    'border':   '#dae3ef',
+    'text':     '#132038',
+    'muted':    '#5a6d8d',
+    'accent':   '#2f6bed',
+    'accent_h': '#2559cd',
+    'ok':       '#15803d',
+    'ok_h':     '#116433',
+    'warn':     '#c2740a',
+    'err':      '#d43a3a',
+    'info':     '#0b7fc4',
+    'tab_bg':   '#e9eff7',
     'tab_sel':  '#ffffff',
-    'head_bg':  '#f1f5f9',
-    'row_alt':  '#f8fafc',
-    'sel':      '#dbeafe',
-    'sel_run':  '#bfdbfe',
-    'console':  '#0f172a',
-    'console_f':'#e2e8f0',
+    'head_bg':  '#e9eff7',
+    'head_fg':  '#3c4f6e',
+    'row_alt':  '#f6f9fd',
+    'sel':      '#d7e4ff',
+    'sel_run':  '#bfd3ff',
+    'console':  '#0e1730',
+    'console_f':'#e6edfa',
+    'sidebar':  '#e8eef7',
+    'sidebar_fg':'#54688a',
+    'sidebar_h': '#dbe4f2',
 }
 DARK = {
-    'bg':       '#0b1120',
-    'surface':  '#111a2e',
-    'surface2': '#1a2438',
-    'border':   '#24314a',
-    'text':     '#e5eaf3',
-    'muted':    '#8ea0bd',
-    'accent':   '#3b82f6',
-    'accent_h': '#2563eb',
-    'ok':       '#22c55e',
-    'ok_h':     '#16a34a',
-    'warn':     '#f59e0b',
+    'bg':       '#0c1424',
+    'surface':  '#131d33',
+    'surface2': '#1a2740',
+    'border':   '#27374f',
+    'text':     '#eaf0fa',
+    'muted':    '#97a8c6',
+    'accent':   '#5b8cff',
+    'accent_h': '#4478f0',
+    'ok':       '#34d399',
+    'ok_h':     '#10b981',
+    'warn':     '#fbbf24',
     'err':      '#f87171',
     'info':     '#38bdf8',
-    'tab_bg':   '#0f172a',
-    'tab_sel':  '#111a2e',
-    'head_bg':  '#16203a',
-    'row_alt':  '#0f182b',
-    'sel':      '#1e3a8a',
-    'sel_run':  '#1d4ed8',
-    'console':  '#080d18',
-    'console_f':'#dbe6f7',
+    'tab_bg':   '#1a2740',
+    'tab_sel':  '#131d33',
+    'head_bg':  '#1a2740',
+    'head_fg':  '#aebdd8',
+    'row_alt':  '#16203a',
+    'sel':      '#234180',
+    'sel_run':  '#2b4fa8',
+    'console':  '#070d1a',
+    'console_f':'#e3ecfb',
+    'sidebar':  '#0a1120',
+    'sidebar_fg':'#8fa3c4',
+    'sidebar_h': '#1d2b47',
 }
 C = dict(LIGHT)
 FONT   = ('Segoe UI', 10)
@@ -76,6 +84,18 @@ FONT_B = ('Segoe UI', 10, 'bold')
 FONT_H = ('Segoe UI', 15, 'bold')
 FONT_H2= ('Segoe UI', 12, 'bold')
 FONT_NUM = ('Segoe UI', 18, 'bold')
+
+# sidebar navigation: (page key, icon, label, tooltip)
+NAV_PAGES = [
+    ('home', '📊', 'Tổng quan', 'Trạng thái 84 tab trên 2 spreadsheet + lịch sử chạy'),
+    ('data', '📁', 'Dữ liệu',   'Xem dữ liệu trong Google Sheet, lọc nhanh & export CSV'),
+    ('run',  '▶',  'Chạy sync', 'Chạy pipeline 18 bước, xem console realtime'),
+    ('set',  '⚙',  'Cài đặt',   'Đăng nhập, Spreadsheet ID, lịch Task Scheduler'),
+    ('logs', '📜', 'Logs',      'Đọc log daily_*.log'),
+]
+PAGE_TITLE = {k: f'{ic}  {lb}' for k, ic, lb, _ in NAV_PAGES}
+# NOT a palette value → survives _force_remap khi đổi theme
+ON_ACCENT = '#fdfdfd'
 
 # (STEP marker key in daily_sync output, display name, results key, core?)
 STEPS = [
@@ -174,8 +194,8 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
     def __init__(self):
         super().__init__()
         self.title('SCI99 Sheets Autosync')
-        self.geometry('1160x860')
-        self.minsize(1040, 760)
+        self.geometry('1240x860')
+        self.minsize(1120, 760)
         self.configure(bg=C['bg'])
         self.settings = cfg.load_settings() or self._default_settings()
         self.sheets = self._merge_sheets()
@@ -192,9 +212,9 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
         self._data_rows = []
         self._theme = self.settings.get('theme', 'light')
         self._build_styles()
-        self._build_header()
         self._build_body()
         self._build_footer()
+        self._build_header()
         self.after(50, self._poll_ui_q)
         # phím tắt desktop: F5 refresh, F6 chạy sync, Esc dừng
         self.bind('<F5>', lambda e: self.refresh_all())
@@ -255,12 +275,18 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
             for tag, color in (('ok', C['ok']), ('warn', C['warn']),
                                ('err', C['err']), ('run', C['info'])):
                 self.tree_hist.tag_configure(tag, foreground=color)
+            self.tree_hist.tag_configure('alt', background=C['row_alt'])
         if hasattr(self, 'tree_ov'):
             for tag, color in (('ok', C['ok']), ('warn', C['warn']),
                                ('err', C['err'])):
                 self.tree_ov.tag_configure(tag, foreground=color)
+            self.tree_ov.tag_configure('alt', background=C['row_alt'])
+        if hasattr(self, 'tree_data'):
+            self.tree_data.tag_configure('alt', background=C['row_alt'])
         if hasattr(self, 'btn_theme'):
             self.btn_theme.config(text='☀️  Light' if theme == 'dark' else '🌙  Dark')
+        if hasattr(self, '_nav_btns'):
+            self._show_page(getattr(self, '_cur_page', 'home'))
 
     def _snapshot_widgets(self):
         snap = []
@@ -376,11 +402,11 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
                         background=C['surface'], foreground=C['muted'], borderwidth=1,
                         bordercolor=C['border'])
         style.map('Ghost.TButton', background=[('active', C['surface2'])])
-        # Treeview
+        # Treeview — bảng đọc thoáng: row cao, heading tách màu nhẹ
         style.configure('Treeview', background=C['surface'], foreground=C['text'],
-                        fieldbackground=C['surface'], font=FONT, rowheight=28, borderwidth=0)
-        style.configure('Treeview.Heading', background=C['head_bg'], foreground=C['text'],
-                        font=FONT_B, relief='flat', padding=(6, 6))
+                        fieldbackground=C['surface'], font=FONT, rowheight=30, borderwidth=0)
+        style.configure('Treeview.Heading', background=C['head_bg'], foreground=C['head_fg'],
+                        font=FONT_B, relief='flat', padding=(8, 7))
         style.map('Treeview',
                   background=[('selected', C['sel'])],
                   foreground=[('selected', C['text'])],
@@ -450,30 +476,28 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
         return e
 
     def _build_header(self):
-        hdr = tk.Frame(self, bg=C['surface'], highlightthickness=1,
-                       highlightbackground=C['border'])
-        hdr.pack(fill='x', padx=16, pady=(16, 0))
+        hdr = tk.Frame(self._main, bg=C['bg'])
+        hdr.pack(fill='x', padx=24, pady=(20, 6))
 
-        left = tk.Frame(hdr, bg=C['surface'])
-        left.pack(side='left', padx=16, pady=12)
-        tk.Label(left, text='📊  SCI99 Sheets Autosync', bg=C['surface'],
-                 fg=C['text'], font=FONT_H).pack(anchor='w')
-        self.lbl_sub = tk.Label(left, text=self._subtitle(), bg=C['surface'],
+        left = tk.Frame(hdr, bg=C['bg'])
+        left.pack(side='left')
+        self.lbl_page = tk.Label(left, text=PAGE_TITLE['home'], bg=C['bg'],
+                                 fg=C['text'], font=FONT_H)
+        self.lbl_page.pack(anchor='w')
+        self.lbl_sub = tk.Label(left, text=self._subtitle(), bg=C['bg'],
                                 fg=C['muted'], font=FONT_S)
-        self.lbl_sub.pack(anchor='w', pady=(2, 0))
+        self.lbl_sub.pack(anchor='w', pady=(3, 0))
 
-        right = tk.Frame(hdr, bg=C['surface'])
-        right.pack(side='right', padx=16, pady=12)
-        self.btn_theme = self.btn(right, '🌙  Dark', self.toggle_theme, kind='ghost')
-        self.btn_theme.pack(side='right', padx=(10, 0))
-        ToolTip(self.btn_theme, 'Chuyển Light / Dark theme (lưu vào cài đặt)')
-        self.lbl_sched_hdr = tk.Label(right, text='', bg=C['surface'], fg=C['ok'],
-                                      font=FONT_B)
-        self.lbl_sched_hdr.pack(anchor='e')
-        self.lbl_clock = tk.Label(right, text='', bg=C['surface'], fg=C['muted'],
+        right = tk.Frame(hdr, bg=C['bg'])
+        right.pack(side='right', pady=(4, 0))
+        self.lbl_clock = tk.Label(right, text='', bg=C['bg'], fg=C['muted'],
                                   font=FONT_S)
-        self.lbl_clock.pack(anchor='e', pady=(2, 0))
+        self.lbl_clock.pack(anchor='e')
         self.after(1000, self._tick_clock)
+
+        # header xong → mới pack vùng trang (footer đã pack side=bottom trước)
+        self._pages_holder.pack(fill='both', expand=True, padx=24, pady=(6, 0))
+        self._show_page(getattr(self, '_cur_page', 'home'))
 
     def _tick_clock(self):
         self.lbl_clock.config(text=datetime.now().strftime('%A · %d/%m/%Y · %H:%M:%S'))
@@ -481,29 +505,89 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
 
     def _build_body(self):
         wrap = tk.Frame(self, bg=C['bg'])
-        wrap.pack(fill='both', expand=True, padx=16, pady=12)
+        wrap.pack(fill='both', expand=True)
 
-        self.nb = ttk.Notebook(wrap)
-        self.nb.pack(fill='both', expand=True)
-        self.tab_home = ttk.Frame(self.nb)
-        self.tab_data = ttk.Frame(self.nb)
-        self.tab_run  = ttk.Frame(self.nb)
-        self.tab_set  = ttk.Frame(self.nb)
-        self.tab_logs = ttk.Frame(self.nb)
-        self.nb.add(self.tab_home, text='  📊  Tổng quan  ')
-        self.nb.add(self.tab_data, text='  📁  Dữ liệu  ')
-        self.nb.add(self.tab_run,  text='  ▶  Chạy sync  ')
-        self.nb.add(self.tab_set,  text='  ⚙  Cài đặt  ')
-        self.nb.add(self.tab_logs, text='  📜  Logs  ')
+        # ----- sidebar (thay cho Notebook tabs trên đỉnh) -----
+        sb = tk.Frame(wrap, bg=C['sidebar'], width=212)
+        sb.pack(side='left', fill='y')
+        sb.pack_propagate(False)
+        self._sidebar = sb
+
+        br = tk.Frame(sb, bg=C['sidebar'])
+        br.pack(fill='x', padx=18, pady=(18, 0))
+        tk.Label(br, text='📊', bg=C['sidebar'], fg=C['text'],
+                 font=('Segoe UI', 22)).pack(anchor='w')
+        tk.Label(br, text='SCI99', bg=C['sidebar'], fg=C['text'],
+                 font=('Segoe UI', 15, 'bold')).pack(anchor='w', pady=(2, 0))
+        tk.Label(br, text='Sheets Autosync', bg=C['sidebar'], fg=C['sidebar_fg'],
+                 font=('Segoe UI', 9)).pack(anchor='w')
+        tk.Frame(sb, bg=C['border'], height=1).pack(fill='x', padx=14, pady=(14, 10))
+
+        self._nav_btns = {}
+        for key, icon, label, tip in NAV_PAGES:
+            b = tk.Button(sb, text=f'  {icon}   {label}', anchor='w', bd=0,
+                          relief='flat', font=('Segoe UI', 11, 'bold'),
+                          padx=14, pady=7, cursor='hand2',
+                          bg=C['sidebar'], fg=C['sidebar_fg'],
+                          activebackground=C['sidebar_h'], activeforeground=C['text'],
+                          command=lambda k=key: self._show_page(k))
+            b.pack(fill='x', padx=10, pady=2)
+            ToolTip(b, tip)
+            self._nav_btns[key] = b
+
+        tk.Frame(sb, bg=C['sidebar']).pack(fill='both', expand=True)
+        tk.Label(sb, text='F5 · F6 · Esc', bg=C['sidebar'], fg=C['sidebar_fg'],
+                 font=('Segoe UI', 8)).pack(pady=(0, 4))
+        self.btn_theme = tk.Button(sb, text='🌙  Dark', anchor='w', bd=0,
+                                   relief='flat', font=('Segoe UI', 10, 'bold'),
+                                   padx=14, pady=7, cursor='hand2',
+                                   bg=C['sidebar_h'], fg=C['text'],
+                                   activebackground=C['surface2'],
+                                   activeforeground=C['text'],
+                                   command=self.toggle_theme)
+        self.btn_theme.pack(fill='x', padx=10, pady=(0, 14))
+        ToolTip(self.btn_theme, 'Chuyển Light / Dark theme (lưu vào cài đặt)')
+
+        # ----- cột nội dung phải: header (dựng sau) + các trang -----
+        self._main = tk.Frame(wrap, bg=C['bg'])
+        self._main.pack(side='left', fill='both', expand=True)
+
+        self._pages_holder = tk.Frame(self._main, bg=C['bg'])
+        self.tab_home = tk.Frame(self._pages_holder, bg=C['bg'])
+        self.tab_data = tk.Frame(self._pages_holder, bg=C['bg'])
+        self.tab_run  = tk.Frame(self._pages_holder, bg=C['bg'])
+        self.tab_set  = tk.Frame(self._pages_holder, bg=C['bg'])
+        self.tab_logs = tk.Frame(self._pages_holder, bg=C['bg'])
+        self._pages = {'home': self.tab_home, 'data': self.tab_data,
+                       'run': self.tab_run, 'set': self.tab_set,
+                       'logs': self.tab_logs}
         self._build_overview()
         self._build_data()
         self._build_run()
         self._build_settings()
         self._build_logs()
+        self._show_page('home')
+
+    def _show_page(self, key):
+        """Sidebar nav: hiện trang `key`, ẩn các trang còn lại, đổi trạng thái nút."""
+        self._cur_page = key
+        for k, fr in getattr(self, '_pages', {}).items():
+            if k == key:
+                fr.pack(fill='both', expand=True)
+            else:
+                fr.pack_forget()
+        for k, b in getattr(self, '_nav_btns', {}).items():
+            on = (k == key)
+            b.config(bg=C['accent'] if on else C['sidebar'],
+                     fg=ON_ACCENT if on else C['sidebar_fg'],
+                     activebackground=C['accent_h'] if on else C['sidebar_h'],
+                     activeforeground=ON_ACCENT if on else C['text'])
+        if hasattr(self, 'lbl_page'):
+            self.lbl_page.config(text=PAGE_TITLE.get(key, ''))
 
     def _build_footer(self):
-        ft = tk.Frame(self, bg=C['bg'])
-        ft.pack(fill='x', padx=16, pady=(0, 12))
+        ft = tk.Frame(self._main, bg=C['bg'])
+        ft.pack(side='bottom', fill='x', padx=24, pady=(4, 10))
         self.lbl_status = tk.Label(ft, text='● Sẵn sàng', bg=C['bg'], fg=C['ok'],
                                    font=FONT_S, anchor='w')
         self.lbl_status.pack(side='left', fill='x', expand=True)
@@ -592,6 +676,7 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
             self.tree_ov.column(c, width=w, anchor='w')
         for tag, color in (('ok', C['ok']), ('warn', C['warn']), ('err', C['err'])):
             self.tree_ov.tag_configure(tag, foreground=color)
+        self.tree_ov.tag_configure('alt', background=C['row_alt'])
         vsb = ttk.Scrollbar(body, orient='vertical', command=self.tree_ov.yview)
         self.tree_ov.configure(yscrollcommand=vsb.set)
         self.tree_ov.pack(side='left', fill='both', expand=True, padx=(14, 0), pady=(0, 14))
@@ -617,6 +702,7 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
         for tag, color in (('ok', C['ok']), ('warn', C['warn']), ('err', C['err']),
                            ('run', C['info'])):
             self.tree_hist.tag_configure(tag, foreground=color)
+        self.tree_hist.tag_configure('alt', background=C['row_alt'])
         hsb2 = ttk.Scrollbar(hbody, orient='vertical', command=self.tree_hist.yview)
         self.tree_hist.configure(yscrollcommand=hsb2.set)
         self.tree_hist.pack(side='left', fill='both', expand=True, padx=(14, 0), pady=(0, 14))
@@ -758,7 +844,8 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
                 continue
             if q and q not in str(row[0]).lower() and q not in str(row[1]).lower():
                 continue
-            tree.insert('', 'end', values=row[:5], tags=(row[5],))
+            tree.insert('', 'end', values=row[:5],
+                        tags=(row[5],) + (('alt',) if shown % 2 else ()))
             shown += 1
         if hasattr(self, 'lbl_ov_count'):
             self.lbl_ov_count.config(
@@ -842,8 +929,9 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
                 return
             for i in self.tree_hist.get_children():
                 self.tree_hist.delete(i)
-            for r in rows:
-                self.tree_hist.insert('', 'end', values=r[:4], tags=(r[4],))
+            for i, r in enumerate(rows):
+                self.tree_hist.insert('', 'end', values=r[:4],
+                                      tags=(r[4],) + (('alt',) if i % 2 else ()))
             self.lbl_hist.config(
                 text=(f'{len(rows)} lần gần nhất · ✅ {sum(1 for r in rows if r[4] == "ok")}'
                       f' · ⚠ {sum(1 for r in rows if r[4] == "warn")}'
@@ -935,6 +1023,7 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
         body = box._body
         self.data_cols = []
         self.tree_data = ttk.Treeview(body, show='headings')
+        self.tree_data.tag_configure('alt', background=C['row_alt'])
         vsb = ttk.Scrollbar(body, orient='vertical', command=self.tree_data.yview)
         hsb = ttk.Scrollbar(body, orient='horizontal', command=self.tree_data.xview)
         self.tree_data.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
@@ -1090,7 +1179,7 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
         for r in self._data_rows:
             if q and not any(q in str(x).lower() for x in r):
                 continue
-            tree.insert('', 'end', values=r)
+            tree.insert('', 'end', values=r, tags=(('alt',) if n % 2 else ()))
             n += 1
         if hasattr(self, 'lbl_data_info') and getattr(self, '_data_base_info', ''):
             self.lbl_data_info.config(
@@ -1363,7 +1452,7 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
         if self.running or self._single_running:
             messagebox.showwarning('Đang chạy', 'Sync đang chạy — hãy Dừng trước hoặc chờ xong.')
             return
-        self.nb.select(self.tab_run)
+        self._show_page('run')
         self._reset_steps()
         self.running = True
         self._stop_requested = False
@@ -1453,7 +1542,7 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
         if self.running or self._single_running:
             messagebox.showwarning('Đang chạy', 'Đang có tiến trình — chờ hoàn tất trước.')
             return
-        self.nb.select(self.tab_run)
+        self._show_page('run')
         self._single_running = True
         self._stop_requested = False
         self._set_run_buttons(True)
