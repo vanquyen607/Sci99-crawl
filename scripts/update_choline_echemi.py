@@ -24,12 +24,18 @@ HEADER_ROWS = 2
 
 import newsheet_lib
 from cdp_browser import (is_blocked, launch_echemi,
-                         open_domestic, save_echemi_cookies, shutdown_echemi, unblock)
+                         save_echemi_cookies, shutdown_echemi, unblock)
 
 EXTRACT_JS = '''() => {
     const out = {echarts: null, title: document.title, bodyLen: 0};
     try {
-        document.querySelectorAll('[_echarts_instance_]').forEach(el => {
+        const els = [...document.querySelectorAll('[_echarts_instance_]')];
+        els.sort((a, b) => {
+            const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+            return ((ra.top + window.scrollY) - (rb.top + window.scrollY)) ||
+                   (ra.left - rb.left);
+        });
+        els.forEach(el => {
             try {
                 const inst = (window.echarts && echarts.getInstanceByDom(el)) || null;
                 if (inst) {
@@ -103,7 +109,6 @@ def _grab(page, browser):
         return None
 
     save_echemi_cookies(browser)  # auto-refresh: store new acw_tc etc.
-    open_domestic(page)
     page.wait_for_timeout(2500)
     data = page.evaluate(EXTRACT_JS)
     if not data.get('echarts'):
@@ -118,50 +123,43 @@ def main():
         print('SKIP: could not extract echemi chart (captcha or empty)')
         return 0
 
-    # pick domestic series: values in 5000..8000, closest to sheet's latest price
-    creds = Credentials.from_service_account_file(CREDS, scopes=['https://www.googleapis.com/auth/spreadsheets'])
-    sh = gspread.authorize(creds).open_by_key(SID)
-    ws = sh.worksheet(SHEET)
-    block_rows = newsheet_lib.read_formula_rows(ws, HEADER_ROWS + 1, WIDTH)
-
-    sheet_latest_price = None
-    for blk in block_rows:
-        if not str(blk[0]).strip():
-            continue
-        if sheet_latest_price is None:
-            try:
-                sheet_latest_price = float(str(blk[7]).replace(',', ''))
-            except Exception:
-                pass
-    block_rows = [blk for blk in block_rows if str(blk[0]).strip()]
-    if not block_rows:
-        print('SKIP: no existing rows in block')
-        return 0
-    print('block rows', len(block_rows), 'latest', block_rows[0][0], 'latest price', sheet_latest_price)
-
+    # chart #0 (đầu trang, sort theo y) = widget Market Price với tab
+    # China Domestic Price active sẵn từ URL A1 — không cần click tab.
     domestic = None
-    best_diff = None
     for ch in data.get('echarts') or []:
         xs = ch.get('xAxis') or []
         series = ch.get('series') or []
         if not xs or not series:
             continue
-        vals2 = []
-        for d in series[0].get('data') or []:
-            try:
-                vals2.append(float(str(d).replace(',', '')))
-            except Exception:
-                pass
-        if not vals2 or not all(5000 <= v <= 8000 for v in vals2):
+        best = None
+        for s in series:
+            vals2 = []
+            for d in s.get('data') or []:
+                try:
+                    vals2.append(float(str(d).replace(',', '')))
+                except Exception:
+                    vals2.append(None)
+            n = sum(1 for v in vals2 if v is not None)
+            if n and (best is None or n > best[0]):
+                best = (n, vals2)
+        if not best:
             continue
-        diff = abs(vals2[-1] - (sheet_latest_price or vals2[-1]))
-        if best_diff is None or diff < best_diff:
-            best_diff = diff
-            domestic = list(zip(xs, vals2))
+        domestic = [(x, v) for x, v in zip(xs, best[1]) if v is not None]
+        break
     if not domestic:
         print('SKIP: domestic series not found in charts')
         return 0
     print('domestic:', domestic)
+
+    creds = Credentials.from_service_account_file(CREDS, scopes=['https://www.googleapis.com/auth/spreadsheets'])
+    sh = gspread.authorize(creds).open_by_key(SID)
+    ws = sh.worksheet(SHEET)
+    block_rows = newsheet_lib.read_formula_rows(ws, HEADER_ROWS + 1, WIDTH)
+    block_rows = [blk for blk in block_rows if str(blk[0]).strip()]
+    if not block_rows:
+        print('SKIP: no existing rows in block')
+        return 0
+    print('block rows', len(block_rows), 'latest', block_rows[0][0])
 
     existing = {}
     for blk in block_rows:
@@ -169,17 +167,27 @@ def main():
         if d:
             existing[d.strftime('%Y-%m-%d')] = blk
 
-    adds = []
+    adds, replaces = [], []
     for ds, price in domestic:
         d = parse_date(ds)
         if not d:
             continue
         iso = d.strftime('%Y-%m-%d')
-        if iso in existing:
-            print('exists', iso)
+        blk = existing.get(iso)
+        if blk is not None:
+            try:
+                old_p = float(str(blk[7]).replace(',', ''))
+            except Exception:
+                old_p = None
+            if old_p is not None and abs(old_p - price) > 1e-9:
+                replaces.append((iso, old_p, price))
+                blk[7] = str(int(price)) if float(price) == int(price) else str(price)
             continue
         adds.append((d, iso, price))
-    if not adds:
+    if replaces:
+        print('REPLACE (giá domestic khác sheet):',
+              [(i, o, n) for i, o, n in replaces])
+    if not adds and not replaces:
         print('SKIP: no new dates (chart dates already in sheet)')
         return 0
     print('adds:', [(i, p) for _, i, p in adds])

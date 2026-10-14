@@ -2,11 +2,10 @@
 """Update the 15 *_echemi tabs of the 原料 spreadsheet from www.echemi.com.
 
 Each tab has its own product page (row 1) and its own series key read from the
-sheet, so no source-side filtering is needed - only the right chart of the page
-has to be picked. Pages carry several echarts widgets (China Domestic / China
-Regional / Enterprise); the winner is the one whose values overlap the tab's
-own history (mean abs error over the shared dates), falling back to closeness
-of the newest value when there is no overlap.
+sheet. The A1 link opens the page with the Market Price widget already on the
+**China Domestic Price** tab - so no tab clicking: read the topmost chart
+(document order, sorted by y) which IS the domestic series. Charts are still
+scored against the tab's own history as a fallback, but the top chart wins.
 
 The site is behind an Aliyun slider, so Chrome is launched as a real process
 with the saved .echemi_profile + echemi_cookies.json (headless Chromium is
@@ -30,7 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import newsheet_lib as NS
 import raw_lib as RL
-from cdp_browser import (_iso, launch_echemi, open_domestic,
+from cdp_browser import (_iso, launch_echemi,
                          save_echemi_cookies, shutdown_echemi, unblock)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -40,7 +39,9 @@ CDP_PORT = 9335
 EXTRACT_JS = '''() => {
     const out = {title: document.title, charts: [], bodyLen: (document.body.innerText || '').length};
     document.querySelectorAll('[_echarts_instance_]').forEach(el => {
-        const c = {label: '', inst: false};
+        const rect = el.getBoundingClientRect();
+        const c = {label: '', inst: false,
+                   y: Math.round(rect.top + window.scrollY), x: Math.round(rect.left)};
         let n = el, hops = 0;
         while (n && hops < 6) {
             const sib = n.previousElementSibling;
@@ -61,6 +62,7 @@ EXTRACT_JS = '''() => {
         } catch (e) { c.err = String(e); }
         out.charts.push(c);
     });
+    out.charts.sort((a, b) => (a.y - b.y) || (a.x - b.x));
     return out;
 }'''
 
@@ -86,7 +88,6 @@ def _fetch_page(page, url, label):
         return None
     if not unblock(page, url, label, manual_wait=60):
         return None
-    open_domestic(page)
     data = None
     for _ in range(6):
         try:
@@ -120,6 +121,17 @@ def series_pairs(chart):
         if d and n is not None:
             out.append((d, n))
     return out
+
+
+def top_chart(charts):
+    """Chart #0 = widget Market Price đầu trang, tab China Domestic Price
+    active sẵn từ URL A1 (không cần click). Trả về (pairs, chart) hoặc ([], None)."""
+    for c in (charts or []):
+        if c.get('inst'):
+            pairs = series_pairs(c)
+            if pairs:
+                return pairs, c
+    return [], None
 
 
 def pick_chart(charts, sheet_map, latest):
@@ -239,14 +251,18 @@ def main():
                 print(f'  {t}: no charts')
                 continue
             smap, latest = sheet_map[t]
-            pairs, chart = pick_chart(data['charts'], smap, latest)
+            pairs, chart = top_chart(data['charts'])
+            src = 'top(domestic)'
+            if not pairs:
+                pairs, chart = pick_chart(data['charts'], smap, latest)
+                src = 'hist-fallback'
             if not pairs:
                 print(f'  {t}: no usable chart among {len(data["charts"])}')
                 continue
             shared = sum(1 for d, _ in pairs if d in smap)
             print(f'  {t}: {len(data["charts"])} charts -> {len(pairs)} points '
                   f'({shared} shared, latest {pairs[-1][0]}={pairs[-1][1]}) '
-                  f'label={(chart.get("label") or "")[:50]!r}')
+                  f'src={src} label={(chart.get("label") or "")[:50]!r}')
             for iso, price in pairs:
                 fresh[t].append(to_fresh(iso, price, keys[t]))
         save_echemi_cookies(browser)

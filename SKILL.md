@@ -33,7 +33,7 @@ D:\Desktop\sci99\
 │   ├── update_fx_rate.py         # cột 汇率/USD của CẢ 2 sheet (batch read)
 │   ├── raw_lib.py                # lib chung cho sheet mới (write_all/read_grid/analyze)
 │   ├── update_raw_100ppi.py      # 26 tab 100ppi (strict trader filter)
-│   ├── update_raw_echemi.py      # 15 tab echemi (CDP 9335 + chart score)
+│   ├── update_raw_echemi.py      # 15 tab echemi (CDP 9335 + top chart Domestic)
 │   ├── update_raw_sci99.py       # 6 tab prices.sci99 detail
 │   ├── update_raw_sci99_pdf.py   # 2 tab vip.sci99 weekly PDF
 │   ├── update_raw_cnbg.py        # 2 tab chinabgao 三甲胺 (鲁西化工 / 国产99.99%)
@@ -84,7 +84,7 @@ Danh sách tab lấy động từ worksheet (mọi tab trừ `SCI99`/`ECHEMI`/`1
 | Nguồn | Số tab | Script |
 |--------|--------|--------|
 | 100ppi (备注 trader) | 26 | `update_raw_100ppi.py` |
-| echemi (chart score, CDP 9335) | 15 | `update_raw_echemi.py` |
+| echemi (top chart = China Domestic, CDP 9335) | 15 | `update_raw_echemi.py` |
 | prices.sci99 detail | 6 | `update_raw_sci99.py` |
 | vip.sci99 weekly PDF (磷酸一铵/二铵) | 2 | `update_raw_sci99_pdf.py` |
 | chinabgao 三甲胺 (鲁西化工 + 国产99.99%) | 2 | `update_raw_cnbg.py` |
@@ -132,7 +132,7 @@ python -X utf8 scripts\daily_sync.py
 3. `update_from_detail_pages.py` — detail-page products — **core**
 4. `update_amino_from_articles.py` — 3 amino từ article
 5. `update_mcp_two_blocks.py` — 磷酸二氢钙 — **core**
-6. `update_choline_echemi.py` — 氯化胆碱 60% (echemi): profile mode `\.echemi_profile` CDP 9333 — 3 lần auto-kéo slider **hết nấc sang phải**, không qua thì chờ kéo tay 75s trong cửa sổ Chrome, **tự export cookie mới**; non-core, SKIP nếu vẫn kẹt
+6. `update_choline_echemi.py` — 氯化胆碱 60% (echemi): profile mode `\.echemi_profile` CDP 9333 — 3 lần auto-kéo slider **hết nấc sang phải**, không qua thì chờ kéo tay 75s trong cửa sổ Chrome, **tự export cookie mới**; đọc **chart #0 đầu trang** (tab China Domestic active sẵn từ URL, không click); giá trùng ngày khác cũ → ghi đè (REPLACE); non-core, SKIP nếu vẫn kẹt
 7. `update_mdcph_weekly.py` — 磷酸一二钙-每周 (vip.sci99 API → PDF周报 → pymupdf; non-core, SKIP khi chưa có report mới — báo ra thứ 5)
 8. `update_whey_sci99.py` — 乳清粉低蛋白 天津 (sci99 search 4 trang, JS pager `li.link-btn[data-current]`, early-stop khi gặp ngày đã có; bài tuần — chỉ có bài mới vào thứ 2)
 9. `update_inositol_100ppi.py` — 肌醇 99% 湖北 (100ppi `plist-1-7598-N`, playwright vì site chặn requests; early-stop khi trang cũ hơn sheet; ~3 trang lịch sử là tối đa)
@@ -141,7 +141,7 @@ python -X utf8 scripts\daily_sync.py
 **Sheet mới (5 updater, mỗi nguồn 1 lần ghi batch):**
 
 11. `update_raw_100ppi.py` — 26 tab (playwright; strict trader filter: tab thiếu row trader → skip)
-12. `update_raw_echemi.py` — 15 tab (profile mode CDP 9335 + chart score; mỗi tab 3 lần auto-kéo hết nấc phải, không qua thì chờ kéo tay 60s, pacing 4–8s giữa các trang)
+12. `update_raw_echemi.py` — 15 tab (profile mode CDP 9335; URL A1 mở trang với tab **China Domestic Price** active sẵn → đọc **chart #0 đầu trang** (sort theo y), KHÔNG click tab, không chọn theo lịch sử; fallback `pick_chart` nếu chart #0 rỗng; mỗi tab 3 lần auto-kéo hết nấc phải, không qua thì chờ kéo tay 60s, pacing 4–8s giữa các trang; giá trùng ngày khác giá cũ → **ghi đè** (WARN)
 13. `update_raw_sci99.py` — 6 tab prices.sci99 detail (header-driven, spec/market filter)
 14. `update_raw_sci99_pdf.py` — 2 tab vip.sci99 PDF (SKIP khi chưa có report mới)
 15. `update_raw_cnbg.py` — 2 tab chinabgao 三甲胺, mỗi tab 1 loại (`鲁西化工` / `国产99.99%`): đọc **article mới nhất** từ trang index A1 (index chỉ có 3报价, article tới 10); khớp theo `产地/品牌` + `备注`, ngày thiếu đúng loại → **skip**, không thay报价 khác
