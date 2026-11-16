@@ -94,7 +94,8 @@ def fetch_echemi():
 
 def _grab(page, browser):
     """Navigate, pass the slider if any, extract the domestic chart. None on failure."""
-    page.goto(URL, wait_until='domcontentloaded', timeout=45000)
+    if page.url != URL:
+        page.goto(URL, wait_until='domcontentloaded', timeout=45000)
 
     blocked, t, body = False, '', ''
     for _ in range(12):

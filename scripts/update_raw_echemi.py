@@ -67,9 +67,9 @@ EXTRACT_JS = '''() => {
 }'''
 
 
-def launch():
-    """(proc, pw, browser) — always profile mode (.echemi_profile, CDP 9335)."""
-    browser, proc, pw = launch_echemi(PROFILE, CDP_PORT)
+def launch(url=None):
+    """(proc, pw, browser) - profile mode. url = Chrome startup page."""
+    browser, proc, pw = launch_echemi(PROFILE, CDP_PORT, url=url)
     return proc, pw, browser
 
 
@@ -82,7 +82,8 @@ def fetch(browser, url, label):
 
 def _fetch_page(page, url, label):
     try:
-        page.goto(url, wait_until='domcontentloaded', timeout=45000)
+        if url and page.url != url:
+            page.goto(url, wait_until='domcontentloaded', timeout=45000)
     except Exception as e:
         print(f'    {label}: goto err {str(e)[:70]}')
         return None
@@ -231,21 +232,25 @@ def main():
         sheet_map[t] = (smap, latest)
 
     fresh = {t: [] for t in titles}
-    proc = None
-    pw = None
-    browser = None
-    try:
-        proc, pw, browser = launch()
-        if not browser:
-            print('SKIP: no browser')
-            print('DONE raw_echemi')
-            return
-        first = True
-        for t in titles:
-            if t not in keys:
+    for idx, t in enumerate(titles):
+        if t not in keys:
+            continue
+        label = 'first' if idx == 0 else t
+        proc = pw = browser = None
+        try:
+            proc, pw, browser = launch(urls[t])
+            if not browser:
+                print(f'  {t}: SKIP no browser')
                 continue
-            data = fetch(browser, urls[t], 'first' if first else t)
-            first = False
+            ctx0 = browser.contexts[0]
+            page0 = ctx0.pages[0] if ctx0.pages else ctx0.new_page()
+            # ensure we are on the product page (startup URL already loaded it)
+            if page0.url != urls[t]:
+                try:
+                    page0.goto(urls[t], wait_until='domcontentloaded', timeout=45000)
+                except Exception as e:
+                    print(f'  {t}: goto err {str(e)[:70]}')
+            data = fetch(browser, urls[t], label)
             time.sleep(random.uniform(4, 8))  # pace pages: keeps Aliyun risk low
             if not data or not data.get('charts'):
                 print(f'  {t}: no charts')
@@ -265,9 +270,12 @@ def main():
                   f'src={src} label={(chart.get("label") or "")[:50]!r}')
             for iso, price in pairs:
                 fresh[t].append(to_fresh(iso, price, keys[t]))
-        save_echemi_cookies(browser)
-    finally:
-        shutdown_echemi(browser, pw, proc, profile=PROFILE)
+            try:
+                save_echemi_cookies(browser)
+            except Exception:
+                pass
+        finally:
+            shutdown_echemi(browser, pw, proc, profile=PROFILE)
 
     blocks, first_row, old_end = {}, {}, {}
     for t in titles:

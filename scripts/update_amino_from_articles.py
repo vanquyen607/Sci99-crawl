@@ -14,18 +14,18 @@ COOKIES = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'sci99_cookie
 import newsheet_lib
 
 ARTICLES = [
-    'https://www.sci99.com/info/3_1000008_45689325.html',  # 2026-09-30
-    'https://www.sci99.com/info/3_1000008_45679433.html',  # 2026-09-29
-    'https://www.sci99.com/info/3_1000008_45667839.html',  # 2026-09-28
-    'https://www.sci99.com/info/3_1000008_45655299.html',  # 2026-09-24
-    'https://www.sci99.com/info/3_1000008_45644310.html',  # 2026-09-23
-    'https://www.sci99.com/info/3_1000008_45633354.html',  # 2026-09-22
-    'https://www.sci99.com/info/3_1000008_45622961.html',  # 2026-09-21
-    'https://www.sci99.com/info/3_1000008_45612795.html',  # 2026-09-20
-    'https://www.sci99.com/info/3_1000008_45600827.html',  # 2026-09-18
-    'https://www.sci99.com/info/3_1000008_45587919.html',  # 2026-09-17
-    'https://www.sci99.com/info/3_1000008_45579922.html',  # 2026-09-16
-    'https://www.sci99.com/info/3_1000008_45567093.html',  # 2026-09-15
+    'https://www.sci99.com/info/3_1000008_46018186.html',  # 2026-11-16
+    'https://www.sci99.com/info/3_1000008_46005303.html',  # 2026-11-13
+    'https://www.sci99.com/info/3_1000008_45993919.html',  # 2026-11-12
+    'https://www.sci99.com/info/3_1000008_45982840.html',  # 2026-11-11
+    'https://www.sci99.com/info/3_1000008_45972309.html',  # 2026-11-10
+    'https://www.sci99.com/info/3_1000008_45964523.html',  # 2026-11-09
+    'https://www.sci99.com/info/3_1000008_45949819.html',  # 2026-11-06
+    'https://www.sci99.com/info/3_1000008_45941229.html',  # 2026-11-05
+    'https://www.sci99.com/info/3_1000008_45928119.html',  # 2026-11-04
+    'https://www.sci99.com/info/3_1000008_45917549.html',  # 2026-11-03
+    'https://www.sci99.com/info/3_1000008_45907243.html',  # 2026-11-02
+    'https://www.sci99.com/info/3_1000008_45895535.html',  # 2026-10-30
 ]
 
 PRODUCTS = {

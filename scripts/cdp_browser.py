@@ -343,10 +343,10 @@ def launch_echemi(profile, port, url=None, log=print):
     try:
         pw = sync_playwright().start()
         browser = pw.chromium.connect_over_cdp(f'http://127.0.0.1:{port}')
-        try:
-            browser.contexts[0].add_cookies(json.load(open(ECHEMI_COOKIES, encoding='utf-8')))
-        except Exception as e:
-            log('cookie inject err', e)
+        # Note: do NOT inject echemi_cookies.json here - replaying saved
+        # acw_tc/cdn_sec_tc/ssxmod_* cookies makes Aliyun's risk SDK treat the
+        # session as automated and serve the slider challenge. The persistent
+        # profile keeps its own cookie jar, which is enough.
         return browser, proc, pw
     except Exception as e:
         log(f'SKIP CDP connect failed: {e}')
