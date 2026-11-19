@@ -40,6 +40,7 @@ D:\Desktop\sci99\
 │   ├── verify_all_status.py      # batched status 33 + 51 tab (GUI import collect_all)
 │   ├── sci99_gui.py               # GUI sidebar 5 trang (Tổng quan / Dữ liệu / Chạy sync / Cài đặt / Logs), theme Light/Dark
 │   ├── app_config.py
+│   ├── app_paths.py               # đọc app_settings.json: SA path + 2 spreadsheet id (1 nguồn)
 │   ├── app_settings.json
 │   ├── Mo app.bat
 │   ├── diid_mapping.json
@@ -61,12 +62,15 @@ D:\Desktop\sci99\
 
 ## Đầu vào
 
-1. Service Account: `C:\Users\DELL\.openclaw\workspace\secrets\service_account.json`
-2. Spreadsheet IDs:
+1. Cấu hình: `scripts/app_settings.json` (gitignored) → đọc qua `scripts/app_paths.py`
+   - `service_account_json` (default `C:\Users\DELL\.openclaw\workspace\secrets\service_account.json`)
+   - `spreadsheet_id` → sheet cũ (33 tab), `raw_spreadsheet_id` → sheet mới (51 tab)
+2. Default trong `app_paths.py` (dùng khi key thiếu):
    - sheet cũ `1kuN8rT9shOellupamis9iyb6CpZFaWpao4VLdzZnQQU` (33 tab)
    - sheet mới `1pnDkBjLjfXgNE-Qv7rU7risEfcM3y4f4nd-OTN9XEu0` (51 tab + 3 index)
    - (sheet very-old `1hmDLpYOALH8-Fu4pxG-VJZURDtz3Z2UzWwTPAOs230I` — archive, không ghi nữa)
 3. sci99 login: xem `scripts/app_settings.json` (file gitignored — tự ghi vào `login_sci99*.py` qua GUI tab ⚙ Cài đặt)
+   - Cấu trúc từng tab / spec dựng lại sheet: `SHEET_STRUCTURE.md`
 4. Python: playwright, gspread, google-auth, requests, pandas, openpyxl, pymupdf, **ttkbootstrap** (GUI theme)
 
 ## Các tab

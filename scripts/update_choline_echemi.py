@@ -12,8 +12,9 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-CREDS = r'C:\Users\DELL\.openclaw\workspace\secrets\service_account.json'
-SID = '1kuN8rT9shOellupamis9iyb6CpZFaWpao4VLdzZnQQU'
+import app_paths
+CREDS = app_paths.service_account_path()
+SID = app_paths.old_spreadsheet_id()
 SHEET = '氯化胆碱_echemi'
 URL = 'https://www.echemi.com/productsInformation/pid_Rock3892-cholinechloride.html'
 PROFILE = os.path.join(HERE, '.echemi_profile')

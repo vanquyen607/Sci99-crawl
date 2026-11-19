@@ -13,8 +13,9 @@ import gspread
 from google.oauth2.service_account import Credentials
 from playwright.sync_api import sync_playwright
 
-CREDS_PATH = r'C:\Users\DELL\.openclaw\workspace\secrets\service_account.json'
-SPREADSHEET_ID = '1kuN8rT9shOellupamis9iyb6CpZFaWpao4VLdzZnQQU'
+import app_paths
+CREDS_PATH = app_paths.service_account_path()
+SPREADSHEET_ID = app_paths.old_spreadsheet_id()
 COOKIES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'sci99_cookies.json')
 
 import newsheet_lib

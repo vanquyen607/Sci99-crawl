@@ -12,6 +12,7 @@ from tkinter import ttk, messagebox, filedialog, scrolledtext
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import app_config as cfg
+import app_paths
 
 # ---------- theme library (bootstrap design templates) ----------
 try:
@@ -338,9 +339,9 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
         return {
             'sci99_username': '',
             'sci99_password': '',
-            'spreadsheet_id': '1kuN8rT9shOellupamis9iyb6CpZFaWpao4VLdzZnQQU',
-            'raw_spreadsheet_id': '1pnDkBjLjfXgNE-Qv7rU7risEfcM3y4f4nd-OTN9XEu0',
-            'service_account_json': r'C:\Users\DELL\.openclaw\workspace\secrets\service_account.json',
+            'spreadsheet_id': app_paths.DEFAULT_OLD_SID,
+            'raw_spreadsheet_id': app_paths.DEFAULT_RAW_SID,
+            'service_account_json': app_paths.DEFAULT_SERVICE_ACCOUNT,
             'task_name': 'sci99-sheets-daily',
             'schedule': {'enabled': True, 'hour': 18, 'minute': 30,
                          'days': ['MON','TUE','WED','THU','FRI','SAT','SUN']},
@@ -1625,7 +1626,7 @@ class App(ttkbs.Window if HAS_BS else tk.Tk):
         self.ent_rsid.grid(row=7, column=0, columnspan=3, sticky='ew', pady=4)
         self.ent_rsid.insert(
             0, self.settings.get('raw_spreadsheet_id',
-                                 '1pnDkBjLjfXgNE-Qv7rU7risEfcM3y4f4nd-OTN9XEu0'))
+                                 app_paths.DEFAULT_RAW_SID))
 
         lab(8, 0, 'Service account JSON', columnspan=3)
         crrow = tk.Frame(inn, bg=C['surface'])

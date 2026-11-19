@@ -5,9 +5,10 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', line_bufferin
 from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
+import app_paths
 
-CREDS = r'C:\Users\DELL\.openclaw\workspace\secrets\service_account.json'
-SID = '1kuN8rT9shOellupamis9iyb6CpZFaWpao4VLdzZnQQU'
+CREDS = app_paths.service_account_path()
+SID = app_paths.old_spreadsheet_id()
 SHEET_B1 = '磷酸二氢钙_云南_sci99_search'   # B1: 川金诺 articles (云南 22%)
 SHEET_B2 = '磷酸二氢钙_西南_sci99'           # B2: prices.sci99 table (西南 饲料级)
 HERE = os.path.dirname(os.path.abspath(__file__))

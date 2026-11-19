@@ -1,12 +1,15 @@
 # -*- coding: utf-8 -*-
 """Reformat 磷酸一二钙-每周: plain prices, M/D/YYYY dates, sort desc, fix col order."""
-import sys, io, re
+import sys, io, re, os
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', line_buffering=True)
 from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
 
-CREDS = r'C:\Users\DELL\.openclaw\workspace\secrets\service_account.json'
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import app_paths
+
+CREDS = app_paths.service_account_path()
 SID = '1hmDLpYOALH8-Fu4pxG-VJZURDtz3Z2UzWwTPAOs230I'
 SHEET = '磷酸一二钙-每周'
 WIDTH = 17

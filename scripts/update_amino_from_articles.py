@@ -6,9 +6,10 @@ from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
 from playwright.sync_api import sync_playwright
+import app_paths
 
-CREDS = r'C:\Users\DELL\.openclaw\workspace\secrets\service_account.json'
-SID = '1kuN8rT9shOellupamis9iyb6CpZFaWpao4VLdzZnQQU'
+CREDS = app_paths.service_account_path()
+SID = app_paths.old_spreadsheet_id()
 COOKIES = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'sci99_cookies.json')
 
 import newsheet_lib

@@ -21,9 +21,10 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 import newsheet_lib as NS
+import app_paths
 
-SID2 = '1pnDkBjLjfXgNE-Qv7rU7risEfcM3y4f4nd-OTN9XEu0'
-CRED = r'C:\Users\DELL\.openclaw\workspace\secrets\service_account.json'
+SID2 = app_paths.raw_spreadsheet_id()
+CRED = app_paths.service_account_path()
 INDEX_TABS = {'ECHEMI', 'SCI99', '100PPI'}
 RANGE_COLS = 26          # read up to col Z
 CHUNK = 30               # ranges per values_batch_get

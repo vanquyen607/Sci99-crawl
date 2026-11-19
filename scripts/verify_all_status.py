@@ -15,11 +15,12 @@ import sys, io, time
 from datetime import datetime, timedelta
 import gspread
 from google.oauth2.service_account import Credentials
+import app_paths
 
-OLD_SID = '1kuN8rT9shOellupamis9iyb6CpZFaWpao4VLdzZnQQU'
-RAW_SID = '1pnDkBjLjfXgNE-Qv7rU7risEfcM3y4f4nd-OTN9XEu0'
+OLD_SID = app_paths.old_spreadsheet_id()
+RAW_SID = app_paths.raw_spreadsheet_id()
 RAW_INDEX = {'ECHEMI', 'SCI99', '100PPI'}
-CREDS = r'C:\Users\DELL\.openclaw\workspace\secrets\service_account.json'
+CREDS = app_paths.service_account_path()
 CHUNK = 30
 COL = 'AZ'          # widths are 9..17, a fixed end column avoids a row_count probe
 SCAN_ROWS = 16      # newest-first, so the latest date sits near the top

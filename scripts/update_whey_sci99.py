@@ -22,8 +22,9 @@ from google.oauth2.service_account import Credentials
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import newsheet_lib as NS
+import app_paths
 
-SHEET_ID = '1kuN8rT9shOellupamis9iyb6CpZFaWpao4VLdzZnQQU'
+SHEET_ID = app_paths.old_spreadsheet_id()
 TAB = '乳清粉_sci99'
 WIDTH = 17
 SEARCH_PAGES = 4
@@ -160,7 +161,7 @@ def rebuild_existing(ws):
 
 def main():
     creds = Credentials.from_service_account_file(
-        r'C:\Users\DELL\.openclaw\workspace\secrets\service_account.json',
+        app_paths.service_account_path(),
         scopes=['https://www.googleapis.com/auth/spreadsheets'])
     sh = gspread.authorize(creds).open_by_key(SHEET_ID)
     ws = sh.worksheet(TAB)

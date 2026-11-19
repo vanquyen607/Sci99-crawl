@@ -7,6 +7,7 @@ import ssl
 import requests
 import gspread
 from google.oauth2.service_account import Credentials
+import app_paths
 
 _SSL_CTX = ssl.create_default_context()
 _SSL_CTX.options |= 0x4
@@ -24,8 +25,8 @@ try:
 except Exception:
     pass
 
-CREDS = r'C:\Users\DELL\.openclaw\workspace\secrets\service_account.json'
-SID = '1kuN8rT9shOellupamis9iyb6CpZFaWpao4VLdzZnQQU'
+CREDS = app_paths.service_account_path()
+SID = app_paths.old_spreadsheet_id()
 SHEET = '汇率'
 API = 'https://www.shibor.net.cn/ags/ms/cm-u-bk-ccpr/CcprHisNew'
 DATE_RE = re.compile(r'^\d{1,2}/\d{1,2}/\d{4}$')

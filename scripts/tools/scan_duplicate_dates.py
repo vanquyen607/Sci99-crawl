@@ -1,13 +1,16 @@
 # -*- coding: utf-8 -*-
 """Scan all 15 sheets: find duplicate dates per block. Option --fix to remove dups."""
-import sys, io, re, argparse
+import sys, io, re, argparse, os
 from datetime import datetime
 from collections import defaultdict
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
 import gspread
 from google.oauth2.service_account import Credentials
 
-CREDS = r'C:\Users\DELL\.openclaw\workspace\secrets\service_account.json'
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import app_paths
+
+CREDS = app_paths.service_account_path()
 SID = '1hmDLpYOALH8-Fu4pxG-VJZURDtz3Z2UzWwTPAOs230I'
 
 SHEETS = [

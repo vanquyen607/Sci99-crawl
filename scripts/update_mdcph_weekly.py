@@ -13,14 +13,15 @@ from google.oauth2.service_account import Credentials
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 COOKIES = os.path.join(HERE, 'sci99_cookies.json')
-CREDS = r'C:\Users\DELL\.openclaw\workspace\secrets\service_account.json'
-SID = '1kuN8rT9shOellupamis9iyb6CpZFaWpao4VLdzZnQQU'
+CREDS = app_paths.service_account_path()
+SID = app_paths.old_spreadsheet_id()
 SHEET = '磷酸一二钙_pdf_sci99'
 TARGET = '磷矿石及磷酸氢钙市场周报'
 NOTE = '磷矿石及磷酸氢钙市场周报'
 HEADER = 2  # data starts row 3
 
 import newsheet_lib
+import app_paths
 
 UA = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'}
 

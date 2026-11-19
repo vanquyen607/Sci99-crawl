@@ -1,12 +1,15 @@
 # -*- coding: utf-8 -*-
 """Reformat 维生素 + 棕榈油: drop future dates, EU→plain prices, M/D/YYYY, sort desc."""
-import sys, io, re
+import sys, io, re, os
 from datetime import datetime, date
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
 import gspread
 from google.oauth2.service_account import Credentials
 
-CREDS = r'C:\Users\DELL\.openclaw\workspace\secrets\service_account.json'
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import app_paths
+
+CREDS = app_paths.service_account_path()
 SID = '1hmDLpYOALH8-Fu4pxG-VJZURDtz3Z2UzWwTPAOs230I'
 TODAY = date.today()
 

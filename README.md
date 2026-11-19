@@ -46,10 +46,15 @@ Phụ thuộc: `pip install playwright gspread google-auth pandas openpyxl reque
 Các file sau nằm trong `.gitignore` vì chứa credentials — máy mới phải khai lại
 qua GUI tab ⚙ Cài đặt (lưu lại sẽ ghi thẳng vào `login_sci99*.py`):
 
-- `scripts/app_settings.json` — user/pass sci99, spreadsheet_id, lịch chạy
+- `scripts/app_settings.json` — **nguồn cấu hình duy nhất**: user/pass sci99,
+  `service_account_json`, `spreadsheet_id`, `raw_spreadsheet_id`, lịch chạy
+  (mọi script đọc qua `scripts/app_paths.py`; thiếu key thì dùng default trong file đó)
 - `scripts/login_sci99.py`, `scripts/login_sci99_daily.py`
 - `scripts/sci99_cookies.json`, `scripts/echemi_cookies.json`
 - Google Service Account JSON (đường dẫn đặt ngoài repo)
+
+Đổi máy / đổi service account / đổi sheet: xem mục 2 trong `INSTALL.md`.
+Cấu trúc chi tiết từng tab (để dựng lại sheet từ đầu): `SHEET_STRUCTURE.md`.
 
 Sheet đang ghi (cả 2 do `daily_sync.py` cập nhật trong 1 lần chạy):
 

@@ -17,22 +17,46 @@ Giải thích các gói:
 - `pymupdf`: Đọc PDF weekly (磷酸一二钙, 磷酸一铵/二铵).
 - `ttkbootstrap`: theme GUI (`bootstrap-light`/`bootstrap-dark`) — thiếu gói này app vẫn mở được (fallback `clam`).
 
-## 2. Thiết lập Secret Service Account cho Google Sheets
+## 2. Cấu hình Google Sheets + login (một chỗ duy nhất)
 
-Mặc định trong `scripts/...py` đang đọc từ:
+Từ bản này mọi script đọc `scripts/app_settings.json` qua `scripts/app_paths.py`
+(không còn hardcode rải rác). File này **gitignored** — máy mới tạo lại bằng GUI
+tab ⚙ Cài đặt, hoặc viết tay:
 
+```json
+{
+  "service_account_json": "D:\\secrets\\service_account.json",
+  "spreadsheet_id": "<id sheet CU 33 tab>",
+  "raw_spreadsheet_id": "<id sheet MOI 51 tab>",
+  "sci99_username": "...",
+  "sci99_password": "..."
+}
 ```
-C:\Users\DELL\.openclaw\workspace\secrets\service_account.json
-```
 
-Nếu bạn cần copy sang thư mục skill:
+Thiếu key nào thì dùng default lịch sử trong `app_paths.py`
+(`C:\Users\DELL\.openclaw\workspace\secrets\service_account.json` + 2 id hiện hành),
+nên máy đang chạy không cần đổi gì.
 
-```bash
-mkdir -p "C:\Users\DELL\.openclaw\skills\14-sci99-sheets-autosync\secrets"
-copy "C:\Users\DELL\.openclaw\workspace\secrets\service_account.json" "C:\Users\DELL\.openclaw\skills\14-sci99-sheets-autosync\secrets\service_account.json"
-```
+### 2.1. Service account
+1. Google Cloud → tạo Service Account → tải JSON key.
+2. Đặt file ở đâu cũng được, trỏ `service_account_json` vào đó.
+3. Mở 2 spreadsheet → **Share** cho email `client_email` trong file JSON, quyền **Editor**.
 
-Sau khi copy, chỉnh lại đường dẫn trong tất cả script (đã sẵn trong workspace).
+### 2.2. Spreadsheet
+1. Tạo/copy 2 spreadsheet (33 tab cũ + 51 tab mới), giữ đúng tên tab.
+2. Nhập id vào `spreadsheet_id` (cũ) và `raw_spreadsheet_id` (mới) — hoặc GUI tab ⚙ Cài đặt.
+3. Kiểm tra: `python -X utf8 scripts\verify_all_status.py` → phải ra 33/33 và 51/51 tab.
+
+### 2.3. Login sci99 + profile echemi (máy mới)
+1. GUI tab ⚙ Cài đặt → nhập user/pass sci99 → Lưu (ghi vào `login_sci99*.py`).
+2. Chạy `python -X utf8 scripts\login_sci99_daily.py` để sinh `sci99_cookies.json`.
+3. Xoá `scripts\.echemi_profile` (nếu copy từ máy khác) rồi chạy
+   `python -X utf8 scripts\update_choline_echemi.py` một lần — IP mới có thể hiện
+   slider Aliyun, kéo tay 1 lần; các lần sau tự động.
+4. Tạo lịch: GUI tab ⚙ Cài đặt → ON + giờ → Lưu (Task Scheduler `sci99-sheets-daily`).
+
+Spec đầy đủ từng tab (tên, header, công thức mẫu, URL nguồn) để dựng lại sheet:
+`SHEET_STRUCTURE.md`.
 
 ## 3. Khởi động Chrome/CDP browser ngay trong Workspace
 
@@ -82,7 +106,7 @@ D:\Desktop\sci99\
     ├── update_raw_sci99_pdf.py        # 2 tab
     ├── update_raw_cnbg.py             # 2 tab (鲁西化工 / 国产99.99%)
     ├── verify_all_status.py           # batched status 33 + 51 tab
-    ├── sci99_gui.py / app_config.py / app_settings.json / Mo app.bat
+    ├── sci99_gui.py / app_config.py / app_paths.py / app_settings.json / Mo app.bat
     ├── diid_mapping.json, sci99_cookies.json, echemi_cookies.json, mcp_*.json
     ├── tools\                         # Maintenance one-off (không daily)
     │   ├── repair_100ppi_leaks.py     # one-off dọn row leak (không daily)
