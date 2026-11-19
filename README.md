@@ -8,6 +8,7 @@ Crawler sci99.com + echemi/mysteel/100ppi → Google Sheets (2 spreadsheet: 33 t
 | --- | --- |
 | Mở app GUI | double-click `Mo app SCI99.bat` |
 | Chạy pipeline 18 bước | `python -X utf8 scripts/daily_sync.py` (hoặc nút ▶ trong GUI) |
+| Chạy song song (test) | double-click `scripts/_test_parallel/run_test.bat` — 4 lane song song, không thay lịch tự động |
 | Lịch tự động | Task Scheduler `sci99-sheets-daily` — sửa trong tab ⚙ Cài đặt của GUI |
 
 - GUI phím tắt: `F5` làm mới · `F6` chạy sync · `Esc` dừng
@@ -28,7 +29,14 @@ scripts/
   update_raw_*.py       5 updater sheet mới (100ppi / echemi / sci99 / PDF / chinabgao)
   update_*.py           các updater sheet cũ theo nguồn
   verify_all_status.py  đối chiếu 33 + 51 tab (batch, GUI import collect_all)
+  _test_parallel/
+    run_parallel_test.py  test pipeline 4 lane song song (khóa theo host), log riêng
+    run_test.bat          double-click để chạy test
 ```
+
+Ghi chú vận hành:
+- `daily_sync.py` (tuần tự) vẫn là bản chạy theo lịch; `_test_parallel` chỉ để đo/so sánh.
+- echemi dùng Chrome profile `scripts/.echemi_profile` (giữ lại để tránh challenge WAF) — không xóa thư mục này.
 
 Phụ thuộc: `pip install playwright gspread google-auth pandas openpyxl requests pymupdf ttkbootstrap`
 (xem `INSTALL.md`, chi tiết kỹ thuật xem `SKILL.md`)
