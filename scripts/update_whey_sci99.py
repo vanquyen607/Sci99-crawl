@@ -66,7 +66,7 @@ def search_article_paths(page):
         }''')
         new = 0
         for f in found:
-            if ('乳清粉' in f['t'] and '价格动态' in f['t']
+            if ('乳清粉' in f['t'] and ('价格动态' in f['t'] or '调价' in f['t'])
                     and f['path'] not in [x['path'] for x in paths]):
                 paths.append(f)
                 new += 1
