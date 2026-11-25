@@ -10,6 +10,7 @@ from datetime import datetime
 import requests
 import gspread
 from google.oauth2.service_account import Credentials
+import app_paths
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 COOKIES = os.path.join(HERE, 'sci99_cookies.json')
